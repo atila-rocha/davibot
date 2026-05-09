@@ -5,13 +5,32 @@ defmodule Davibot.Consumer do
   """
 
   use Nostrum.Consumer
-  alias Nostrum.Api
+  # alias Nostrum.Api
   require Logger
 
   alias Davibot.Commands
 
-  @impl true
-  def handle_event() do
-    
+  # inicia consumer usando o supervisor?
+  #def start_link(opts) do
+  #  Consumer.start_link(__MODULE__, opts)
+  #end
+  # def start_link, do: __MODULE__.start_link()
+
+  def handle_event({:MESSAGE_CREATE, msg, _ws}) do
+    #IO.puts(msg)
+    IO.inspect(msg)
+    handle_message(msg)
+    #{:noreply, state}
   end
+
+  # Ignora outros eventos (READY, etc.)
+  def handle_event(_event, state), do: {:noreply, state}
+
+  # manda o calabreso
+  defp handle_message(%{content: "!calabreso"} = msg) do
+    Commands.calabreso(msg)
+  end
+
+  # Catch-all para mensagens que não são comandos
+  defp handle_message(_msg), do: :ok
 end
