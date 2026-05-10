@@ -262,4 +262,63 @@ defmodule Davibot.Commands do
     Api.Message.create(channel_id, embeds: [error_embed])
   end
 
+  defp extract_kick_args(content) do
+    # Divide a string por espaços
+    # Ex: ["!kick", "<@123456789>", "taoff"]
+    args = String.split(content, ~r/\s+/, trim: true)
+
+    case args do
+      [_comando, mention | rest] ->
+        # Tenta capturar o ID da menção no SEGUNDO elemento da lista
+        case Regex.run(~r/<@!?(\d+)>/, mention) do
+          [_, user_id_str] ->
+            reason = if rest == [], do: "Motivo não especificado", else: Enum.join(rest, " ")
+            {:ok, String.to_integer(user_id_str), reason}
+
+          _ ->
+            {:error, "O primeiro argumento após o comando deve ser uma menção válida (ex: <@user>)."}
+        end
+
+      _ ->
+        {:error, "Uso correto: `!kick <@usuario> <motivo>`"}
+    end
+  end
+
+def kick(message) do
+  with {:ok, user_id, reason} <- extract_kick_args(message.content),
+       guild_id when not is_nil(guild_id) <- message.guild_id do
+    case Api.Guild.kick_member(guild_id, user_id, reason) do
+      {:ok} ->
+        embed = %Nostrum.Struct.Embed{
+          title: "✅ Sucesso!",
+          description: "O usuário <@#{user_id}> foi kickado do servidor.\n**Motivo:** \"#{reason}\"",
+          color: 0x00FF00
+        }
+        Api.Message.create(message.channel_id, embed: embed)
+
+      {:error, error} ->
+        send_error_message(message.channel_id, "Falha ao kickar usuário: #{inspect(error)}")
+    end
+    else
+      {:error, msg} ->
+        send_error_message(message.channel_id, msg)
+
+      nil ->
+        send_error_message(message.channel_id, "Este comando só pode ser usado em servidores.")
+
+      _ ->
+        send_error_message(message.channel_id, "Erro inesperado.")
+    end
+  end
+
+  defp send_error_message(channel_id, text) do
+    embed = %Nostrum.Struct.Embed{
+      title: "❌ Erro",
+      description: text,
+      color: 0xFF0000
+    }
+    Api.Message.create(channel_id, embeds: [embed])
+  end
+
+
 end

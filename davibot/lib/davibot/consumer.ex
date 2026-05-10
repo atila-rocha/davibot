@@ -61,6 +61,11 @@ defmodule Davibot.Consumer do
     Commands.avatar(msg)
   end
 
+  defp handle_message(%{content: <<"!kick", _::binary>>} = msg) do
+    IO.inspect("KICK ACIONADO")
+    Commands.kick(msg)
+  end
+
 
   # Catch-all para mensagens que não são comandos
   defp handle_message(_msg), do: :ok
