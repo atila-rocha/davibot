@@ -66,6 +66,11 @@ defmodule Davibot.Consumer do
     Commands.kick(msg)
   end
 
+  defp handle_message(%{content: <<"!xp", _::binary>>} = msg) do
+    IO.inspect("XP COMANDO ACIONADO")
+    Commands.xp(msg)
+  end
+
 
   # Catch-all para mensagens que não são comandos
   defp handle_message(_msg), do: :ok
