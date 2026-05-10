@@ -112,4 +112,42 @@ defmodule Davibot.Commands do
     }
   end
 
+  @doc """
+  Comando !sair - envia mensagem e sai do servidor
+  """
+  def sair(%{content: content, channel_id: channel_id, guild_id: guild_id}) do
+    content
+    |> String.slice(6..-1)  # Remove "!sair " (6 caracteres)
+    |> String.trim()
+    |> case do
+      "" ->
+        error_embed = %Nostrum.Struct.Embed{
+          title: "❌ Erro",
+          description: "Mensagem não pode ser vazia. Use: `!sair <mensagem>`",
+          color: 0xFF0000
+        }
+        Api.Message.create(channel_id, embeds: [error_embed])
+
+      msg_text ->
+        confirm_embed = %Nostrum.Struct.Embed{
+          title: "🛑 Davibot está saindo do servidor!",
+          description: msg_text,
+          color: 0xFF9900
+        }
+
+      # Envia mensagem e logga com IO.inspect
+      channel_id
+      |> Api.Message.create(embeds: [confirm_embed])
+      |> tap(fn _ ->
+        IO.inspect("Davibot saindo do servidor #{guild_id}: #{msg_text}", label: "SAÍDA")
+      end)
+      # Sai do servidor e logga
+      guild_id
+      |> Api.Guild.leave()
+      |> tap(fn _ ->
+        IO.inspect("Davibot deixou o servidor #{guild_id}", label: "CONFIRMAÇÃO")
+      end)
+    end
+  end
+
 end

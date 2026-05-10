@@ -50,6 +50,12 @@ defmodule Davibot.Consumer do
     |> send_embed(channel_id)
   end
 
+  defp handle_message(%{channel_id: channel_id, content: <<"!sair ", _::binary>>} = msg) do
+    IO.inspect("SAIDA DO SERVIDOR ACIONADA")
+    Commands.sair(msg)
+    #{:noreply, state}
+  end
+
 
   # Catch-all para mensagens que não são comandos
   defp handle_message(_msg), do: :ok
