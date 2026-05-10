@@ -1,3 +1,4 @@
+# lib/davibot/store.exs
 defmodule Davibot.Store do
   @moduledoc """
   Persistencia de arquivos em um arquivo json

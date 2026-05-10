@@ -1,3 +1,4 @@
+# lib/davibot.exs
 defmodule Davibot do
   @moduledoc """
   Documentation for `Davibot`.
