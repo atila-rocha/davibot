@@ -56,6 +56,11 @@ defmodule Davibot.Consumer do
     #{:noreply, state}
   end
 
+  defp handle_message(%{content: <<"!avatar", _::binary>>} = msg) do
+    IO.inspect("COMANDO AVATAR ACIONADO")
+    Commands.avatar(msg)
+  end
+
 
   # Catch-all para mensagens que não são comandos
   defp handle_message(_msg), do: :ok
