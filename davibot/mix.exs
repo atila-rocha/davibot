@@ -15,7 +15,7 @@ defmodule Davibot.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {Davibot.Application, []}
+      mod: {Davibot, []}
     ]
   end
 

@@ -1,19 +1,22 @@
 # lib/davibot.exs
 defmodule Davibot do
-  @moduledoc """
-  Documentation for `Davibot`.
-  """
+  # See https://hexdocs.pm/elixir/Application.html
+  # for more information on OTP Applications
+  @moduledoc "Supervisor principal - ponto de entrada do bot"
 
-  @doc """
-  Hello world.
+  use Application
 
-  ## Examples
+  @impl true
+  def start(_type, _args) do
+    children = [
+      Davibot.Consumer
+      # Starts a worker by calling: Davibot.Worker.start_link(arg)
+      # {Davibot.Worker, arg}
+    ]
 
-      iex> Davibot.hello()
-      :world
-
-  """
-  def hello do
-    :world
+    # See https://hexdocs.pm/elixir/Supervisor.html
+    # for other strategies and supported options
+    opts = [strategy: :one_for_one, name: Davibot.Supervisor]
+    Supervisor.start_link(children, opts)
   end
 end
