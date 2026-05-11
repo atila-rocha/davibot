@@ -1,0 +1,2832 @@
+Usuário:
+
+gemini, avalie se essas funções para um bot no discord estão corretas logicamente e sintaticamente:
+
+@doc """
+  Comando !avatar - retorna avatar do usuário com tamanho específico
+  Uso: !avatar  
+  """
+  def avatar(%{content: content, channel_id: channel_id, guild_id: guild_id} = msg) do
+    content
+    | String.trim()
+    | extract_avatar_args()
+    | case do
+      {:ok, user_id, size} -
+        user_id
+        | get_user_info(guild_id)
+        | build_avatar_url(size)
+        | send_avatar_embed(channel_id, user_id)
+
+      :error -
+        error_embed = %Embed{
+          title: "❌ Erro",
+          description: "Uso: `!avatar  ` (16-4096 px)",
+          color: 0xFF0000
+        }
+        Api.create_message(channel_id, embeds: [error_embed])
+    end
+  end
+
+  @doc """
+  Extrai user_id da menção e tamanho do argumento
+  Regex:  ou 
+  """
+  defp extract_avatar_args(content) do
+    # Remove o comando "!avatar" e pega o resto
+    args = content | String.replace_prefix("!avatar", "") | String.trim()
+
+    # Regex para menção Discord:  ou 
+    mention_regex = ~r//
+    size_regex = ~r/\d+/
+
+    with [_, user_id_str] = 16 and size  :error
+    end
+  end
+
+  @doc """
+  Obtém info do usuário via API ou Cache
+  """
+  def get_user_info(user_id, guild_id) do
+    with nil  {:ok, member}
+      _ - :error
+    end
+  end
+
+  # Caso 1: Membro não possui avatar no servidor (avatar: nil)
+  # Faz o matching diretamente no cabeçalho e busca o avatar global do usuário
+  defp build_avatar_url(%Nostrum.Struct.Guild.Member{avatar: nil, user: user}, _guild_id, size) do
+    user
+    | Nostrum.Struct.User.avatar_url()
+    | (fn url - url  "?size=#{size}" end).()
+    | then(&{:ok, &1, user})
+  end
+
+  # Caso 2: Membro possui avatar no servidor
+  # O matching anterior falha, então este aqui processa o avatar da guilda
+  defp build_avatar_url(%Nostrum.Struct.Guild.Member{user: user} = member, guild_id, size) do
+    member
+    | Nostrum.Struct.Guild.Member.avatar_url(guild_id)
+    | (fn url - url  "?size=#{size}" end).()
+    | then(&{:ok, &1, user})
+  end
+
+  # Caso 3: Fallback de erro
+  defp build_avatar_url(_, _, _), do: :error
+
+  @doc """
+  Envia embed com avatar
+  """
+  defp send_avatar_embed({:ok, avatar_url, user}, channel_id, _user_id) do
+    username = user.username || user.global_name || "Usuário"
+
+    embed = %Embed{
+      title: "🖼️ Avatar de #{username}",
+      image: %Embed.Image{url: avatar_url, width: size, height: size},
+      color: 0x7289DA,
+      footer: %Embed.Footer{text: "Tamanho: #{size}x#{size} px"}
+    }
+
+    Api.Message.create(channel_id, embeds: [embed])
+  end
+
+  defp send_avatar_embed(:error, channel_id, _user_id) do
+    error_embed = %Embed{
+      title: "❌ Erro",
+      description: "Não foi possível obter o avatar do usuário.",
+      color: 0xFF0000
+    }
+
+    Api.Mesage.create(channel_id, embeds: [error_embed])
+  end
+
+
+IA:
+
+Estou analisando o código. Parece que você está construindo uma função para buscar avatares no Discord, o que é um projeto interessante.
+
+
+
+Sua lógica está bem estruturada e utiliza bem os recursos do Elixir (como o operador *pipe* e o bloco `with`), mas existem **erros de sintaxe (aridade)**, **problemas de escopo de variáveis** e uma **falha na lógica de Regex** que impediriam o bot de funcionar corretamente.
+
+Aqui estão os pontos principais que precisam de correção:
+
+### 1. Erros de Aridade e Pipes (O mais crítico)
+Na função `avatar/1`, você faz:
+```elixir
+user_id
+| get_user_info(guild_id)
+| build_avatar_url(size)
+```
+*   **O problema:** `get_user_info` retorna `{:ok, member}` ou `:error`. O próximo pipe passará essa **tupla** como o primeiro argumento para `build_avatar_url`.
+*   **Além disso:** Sua função `build_avatar_url` foi definida para aceitar **3 argumentos** (`member, guild_id, size`), mas você a chama com apenas **1 adicional** (o `size`), resultando em um erro de função não encontrada.
+
+### 2. Problema na Regex de Tamanho (`size`)
+Sua regex `size_regex = ~r/\d+/` é muito genérica.
+*   **O problema:** Como a menção do usuário `&lt;@123456789` também contém números, o `Regex.run` vai capturar o ID do usuário como sendo o tamanho do avatar, pois ele aparece primeiro na string.
+*   **Solução:** Você deve garantir que o tamanho seja capturado após a menção ou tratar os argumentos como uma lista de strings.
+
+### 3. Escopo de Variáveis
+Na função `send_avatar_embed`, você tenta usar a variável `size`:
+```elixir
+image: %Embed.Image{url: avatar_url, width: size, height: size}
+```
+*   **O problema:** A variável `size` não existe dentro dessa função. Ela foi definida lá no início em `extract_avatar_args` e não foi passada adiante na tupla de sucesso.
+
+### 4. Erros de Digitação (Typos)
+*   No final do código, você escreveu `Api.Mesage.create` (falta um "s" em Message).
+*   Em `avatar/1` você usa `Api.create_message`, mas em outras partes usa `Api.Message.create`. Recomenda-se manter o padrão da biblioteca `Nostrum`.
+
+---
+
+### Versão Corrigida e Otimizada
+
+Aqui está o código corrigido, tratando os erros de aridade e melhorando a captura de argumentos:
+
+```elixir
+  @doc """
+  Comando !avatar - retorna avatar do usuário com tamanho específico
+  """
+  def avatar(%{content: content, channel_id: channel_id, guild_id: guild_id} = _msg) do
+    content
+    | extract_avatar_args()
+    | case do
+      {:ok, user_id, size} -
+        # Precisamos tratar o fluxo de erro caso o usuário não seja encontrado
+        with {:ok, member} &lt;- get_user_info(user_id, guild_id),
+             {:ok, avatar_url, user} &lt;- build_avatar_url(member, guild_id, size) do
+          send_avatar_embed(channel_id, avatar_url, user, size)
+        else
+          _ - send_error_message(channel_id, "Não foi possível obter o avatar.")
+        end
+
+      :error -
+        send_error_message(channel_id, "Uso: `!avatar &lt;@usuario ` (16-4096 px)")
+    end
+  end
+
+  defp extract_avatar_args(content) do
+    # Regex mais robusta: captura a menção e depois o número que sobrar
+    mention_regex = ~r/&lt;@!?(\d+)/
+    
+    with [mention, user_id_str] &lt;- Regex.run(mention_regex, content),
+         # Removemos a menção da string para buscar o tamanho no que sobrou
+         rest &lt;- String.replace(content, mention, ""),
+         [size_str] &lt;- Regex.run(~r/\d+/, rest),
+         {user_id, _} &lt;- Integer.parse(user_id_str),
+         {size, _} &lt;- Integer.parse(size_str),
+         true &lt;- size = 16 and size &lt;= 4096 do
+      {:ok, user_id, size}
+    else
+      _ - :error
+    end
+  end
+
+  def get_user_info(user_id, guild_id) do
+    case Nostrum.Cache.Member.get(guild_id, user_id) do
+      {:ok, member} - {:ok, member}
+      {:error, _} - Nostrum.Api.get_guild_member(guild_id, user_id)
+    end
+  end
+
+  # Caso 1: Avatar específico da guilda é nulo
+  defp build_avatar_url(%Nostrum.Struct.Guild.Member{avatar: nil, user: user}, _guild_id, size) do
+    url = Nostrum.Struct.User.avatar_url(user) &lt; "?size=#{size}"
+    {:ok, url, user}
+  end
+
+  # Caso 2: Possui avatar na guilda
+  defp build_avatar_url(%Nostrum.Struct.Guild.Member{user: user} = member, guild_id, size) do
+    url = Nostrum.Struct.Guild.Member.avatar_url(member, guild_id) &lt; "?size=#{size}"
+    {:ok, url, user}
+  end
+
+  defp build_avatar_url(_, _, _), do: :error
+
+  defp send_avatar_embed(channel_id, avatar_url, user, size) do
+    username = user.username || "Usuário"
+
+    embed = %Nostrum.Struct.Embed{
+      title: "🖼️ Avatar de #{username}",
+      image: %Nostrum.Struct.Embed.Image{url: avatar_url},
+      color: 0x7289DA,
+      footer: %Nostrum.Struct.Embed.Footer{text: "Tamanho: #{size}x#{size} px"}
+    }
+
+    Nostrum.Api.create_message(channel_id, embeds: [embed])
+  end
+
+  defp send_error_message(channel_id, description) do
+    embed = %Nostrum.Struct.Embed{
+      title: "❌ Erro",
+      description: description,
+      color: 0xFF0000
+    }
+    Nostrum.Api.create_message(channel_id, embeds: [embed])
+  end
+```
+
+### O que foi alterado:
+1.  **Regex de Tamanho:** Agora eu removo a menção da string antes de procurar pelo número do tamanho. Isso evita que o ID do usuário seja confundido com o tamanho.
+2.  **Fluxo do `avatar/1`:** Removi os pipes excessivos que estavam quebrando a aridade e usei um bloco `with` para validar se o usuário existe antes de tentar gerar a URL.
+3.  **Passagem de `size`:** Agora o `size` é passado explicitamente para a função `send_avatar_embed`.
+4.  **Nomes de Funções da API:** Atualizei para os nomes padrões da `Nostrum` (ex: `Nostrum.Api.create_message`).
+5.  **Cache:** Ajustei a chamada do cache para o padrão mais recente da biblioteca.
+
+
+Usuário:
+
+Agora eu quero saber como ficaria meu consumar. Veja o meu consumer atual:
+
+# lib/davibot/consumer.exs
+defmodule Davibot.Consumer do
+  @moduledoc """
+  handler de eventos - despacha os comandos
+  Na minha visão: Controller para os comandos - recebe as entradas e direciona para as funções commands
+  """
+
+  use Nostrum.Consumer
+  # alias Nostrum.Api
+  require Logger
+
+  alias Davibot.Commands
+
+  alias Nostrum.Api.Message
+
+
+  def handle_event({:MESSAGE_CREATE, msg, _ws}) do # TODO: adaptar para que aceite com espaço, e com caixa alta. usar pipe
+    # IO.inspect(msg) printa a mensagem no terminal
+    handle_message(msg)
+  end
+
+  #def handle_event({:MESSAGE_CREATE, msg = %Message{}, _}) do
+  #  handle_command(msg)
+  #end
+
+  # Ignora outros eventos (READY, etc.)
+  def handle_event(_event, state), do: {:noreply, state}
+
+  # manda o calabreso
+  defp handle_message(%{content: "!calabreso"} = msg) do
+    IO.inspect("CALABRESO MESSAGE ACIONADO")
+    Commands.calabreso(msg)
+  end
+
+   defp handle_message(%{channel_id: channel_id, content: } = msg) do
+    IO.inspect("ROLETA RUSSA ACIONADA")
+    Commands.roleta_russa(msg)
+    | send_embed(channel_id)
+  end
+
+  defp handle_message(%{channel_id: channel_id, content: } = msg) do
+    IO.inspect("ROLETA RUSSA ACIONADA")
+    Commands.roleta_russa(msg)
+    | send_embed(channel_id)
+  end
+
+  defp handle_message(%{channel_id: channel_id, content: } = msg) do
+    IO.inspect("ROLETA RUSSA ACIONADA")
+    Commands.roleta_russa(msg)
+    | send_embed(channel_id)
+  end
+
+  defp handle_message(%{channel_id: channel_id, content: } = msg) do
+    IO.inspect("SAIDA DO SERVIDOR ACIONADA")
+    Commands.sair(msg)
+    #{:noreply, state}
+  end
+
+
+  # Catch-all para mensagens que não são comandos
+  defp handle_message(_msg), do: :ok
+
+  defp send_embed(embed, channel_id) do
+    Message.create(channel_id, embed: embed)
+  end
+end
+
+mantenha esse padrão
+
+
+IA:
+
+Estou analisando o seu código. O padrão parece focar em lidar com eventos específicos de mensagens e direcionar chamadas para um módulo de comandos.
+
+
+
+Para integrar o comando `!avatar` mantendo o padrão do seu `Consumer`, basta adicionar uma nova cláusula `handle_message` utilizando o *binary matching* (`&lt;&lt;"!avatar", _::binary`).
+
+Como a função `Commands.avatar/1` que estruturamos anteriormente já cuida do envio das mensagens (tanto de erro quanto de sucesso) internamente via `Api`, você não precisa dar pipe para o `send_embed` no consumer, seguindo o mesmo estilo que você já usa para o `!calabreso` e `!sair`.
+
+Aqui está como o seu arquivo `consumer.exs` ficaria atualizado:
+
+
+
+Para integrar o comando `!avatar` mantendo exatamente o seu padrão de logs e estrutura, adicionei a cláusula correspondente. 
+
+Note que, como a função `Commands.avatar(msg)` que criamos já lida com o envio da mensagem (sucesso ou erro) através da `Api`, ela não precisa do pipe para `send_embed`, ficando igual ao seu comando `!calabreso`.
+
+
+
+Para manter o seu padrão de múltiplas cláusulas `defp handle_message` e os logs com `IO.inspect`, o seu `Consumer` ficaria assim:
+
+
+
+Para manter exatamente o padrão que você já está usando, com os mesmos aliases e logs, o seu arquivo `lib/davibot/consumer.exs` ficaria assim:
+
+
+
+Para manter exatamente o seu padrão de múltiplas cláusulas `defp handle_message` e os logs com `IO.inspect`, o seu `Consumer` ficaria assim com a adição do comando `!avatar`.
+
+Como a função `Commands.avatar(msg)` que estruturamos anteriormente já cuida do envio das mensagens (tanto de erro quanto de sucesso) internamente através da `Api`, ela não precisa do pipe para `send_embed` no `Consumer`, seguindo o mesmo estilo do seu comando `!calabreso`.
+
+### Resumo das alterações:
+1.  **Novo Comando:** Adicionada a cláusula `defp handle_message(%{content: &lt;&lt;"!avatar", _::binary} = msg)` no topo das definições de mensagens.
+2.  **Logs:** Mantido o padrão de `IO.inspect` para monitoramento no terminal.
+3.  **Aridade:** Ajustei levemente a assinatura de `handle_event` para incluir o `state`, que é o padrão recomendado pela biblioteca `Nostrum` para evitar avisos de compilação, mas mantendo a lógica de despacho que você criou.
+
+Se precisar de mais algum ajuste na lógica de busca de membros ou tratamento de erros, é só avisar!
+
+
+Usuário:
+
+gem, tentei compilar e no trecho de código abaixo deu erro, veja:
+
+# Caso 1: Avatar específico da guilda é nulo
+  defp build_avatar_url(%Nostrum.Struct.Guild.Member{avatar: nil, user: user}, _guild_id, size) do
+    url = Nostrum.Struct.User.avatar_url(user)  "?size=#{size}"
+    {:ok, url, user}
+  end
+
+  # Caso 2: Possui avatar na guilda
+  defp build_avatar_url(%Nostrum.Struct.Guild.Member{user: user} = member, guild_id, size) do
+    url = Nostrum.Struct.Guild.Member.avatar_url(member, guild_id)  "?size=#{size}"
+    {:ok, url, user}
+  end
+
+
+     error: unknown key :user for struct Nostrum.Struct.Guild.Member
+     │
+ 216 │   defp build_avatar_url(%Nostrum.Struct.Guild.Member{user: user} = member, guild_id, size) do
+     │                         ^
+     │
+     └─ lib/davibot/commands.ex:216:25: Davibot.Commands.build_avatar_url/3
+     error: unknown key :user for struct Nostrum.Struct.Guild.Member
+     │
+ 210 │   defp build_avatar_url(%Nostrum.Struct.Guild.Member{avatar: nil, user: user}, _guild_id, size) do
+     │                         ^
+     │
+     └─ lib/davibot/commands.ex:210:25: Davibot.Commands.build_avatar_url/3
+== Compilation error in file lib/davibot/commands.ex ==
+** (CompileError) lib/davibot/commands.ex: cannot compile module Davibot.Commands (errors have been logged)
+
+
+IA:
+
+Estou analisando o erro de compilação que você enviou.
+
+
+
+O erro ocorre porque, na biblioteca **Nostrum**, a struct `Nostrum.Struct.Guild.Member` armazena apenas o `user_id` (o ID do usuário) e não o objeto `user` completo dentro dela. Para obter os dados do usuário (como o nome e o avatar global), precisamos buscar a struct `Nostrum.Struct.User` separadamente.
+
+Aqui está o ajuste necessário nas suas funções para corrigir o erro de compilação e garantir que a lógica funcione:
+
+### 1. Ajuste no `get_user_info/2`
+Vamos alterar essa função para buscar tanto o **Membro** (para o avatar do servidor) quanto o **Usuário** (para o avatar global e nome).
+
+```elixir
+def get_user_info(user_id, guild_id) do
+  # Busca o membro (Cache ou API)
+  member_result = 
+    case Nostrum.Cache.Member.get(guild_id, user_id) do
+      {:ok, member} - {:ok, member}
+      {:error, _} - Nostrum.Api.get_guild_member(guild_id, user_id)
+    end
+
+  # Busca o usuário (Cache ou API) para ter o objeto User completo
+  user_result =
+    case Nostrum.Cache.User.get(user_id) do
+      {:ok, user} - {:ok, user}
+      {:error, _} - Nostrum.Api.get_user(user_id)
+    end
+
+  case {member_result, user_result} do
+    {{:ok, member}, {:ok, user}} - {:ok, member, user}
+    _ - :error
+  end
+end
+```
+
+### 2. Ajuste no `build_avatar_url`
+Agora passamos o `user` como um argumento separado, removendo a tentativa de pattern matching dentro da struct `Member`.
+
+```elixir
+# Caso 1: Membro não possui avatar específico no servidor (avatar: nil)
+defp build_avatar_url(%Nostrum.Struct.Guild.Member{avatar: nil}, user, _guild_id, size) do
+  url = Nostrum.Struct.User.avatar_url(user) &lt; "?size=#{size}"
+  {:ok, url, user}
+end
+
+# Caso 2: Membro possui avatar específico no servidor
+defp build_avatar_url(member, user, guild_id, size) do
+  url = Nostrum.Struct.Guild.Member.avatar_url(member, guild_id) &lt; "?size=#{size}"
+  {:ok, url, user}
+end
+
+# Caso 3: Fallback
+defp build_avatar_url(_, _, _, _), do: :error
+```
+
+### 3. Ajuste no comando principal `avatar/1`
+Ajustamos a chamada para lidar com o novo retorno de `get_user_info`:
+
+```elixir
+def avatar(%{content: content, channel_id: channel_id, guild_id: guild_id} = _msg) do
+  content
+  | extract_avatar_args()
+  | case do
+    {:ok, user_id, size} -
+      # Agora recebemos member e user
+      with {:ok, member, user} &lt;- get_user_info(user_id, guild_id),
+           {:ok, avatar_url, user} &lt;- build_avatar_url(member, user, guild_id, size) do
+        send_avatar_embed(channel_id, avatar_url, user, size)
+      else
+        _ - send_error_message(channel_id, "Não foi possível obter os dados do usuário.")
+      end
+
+    :error -
+      send_error_message(channel_id, "Uso: `!avatar &lt;@usuario ` (16-4096 px)")
+  end
+end
+```
+
+### Por que isso resolve?
+1.  **Sintaxe:** Removemos a chave `:user` da struct `Member`, que era o que causava o `CompileError`.
+2.  **Lógica:** O Discord separa "Membro" (dados específicos de um servidor, como apelido e avatar da guilda) de "Usuário" (dados globais, como tag e avatar padrão). Ao buscar os dois, seu bot consegue decidir qual URL mostrar sem quebrar.
+
+**Dica:** Certifique-se de que os módulos `Nostrum.Cache.Member` e `Nostrum.Cache.User` estão habilitados no seu `Config`, caso contrário o bot fará requisições à API do Discord toda vez (o que é mais lento, mas funciona).
+
+
+Usuário:
+
+gemini, está quase pronta a nossa nova feature mas eu tenho uma dúvida: quando uso tamanhos fixos como 2096, 2048, 128, ele funciona mas quando são outros tamanhos, ele não funciona, porque?
+
+
+IA:
+
+Estou verificando isso.
+
+
+
+O problema ocorre porque o Discord não gera redimensionamentos para **qualquer** número arbitrário no parâmetro `?size=`. Ele trabalha com uma tabela fixa de potências de 2.
+
+### O Motivo Técnico
+A CDN do Discord (onde as imagens ficam hospedadas) utiliza um sistema de cache que aceita apenas tamanhos que sejam **potências de 2** entre **16 e 4096**.
+
+Se você enviar um valor como `300`, o Discord simplesmente ignora o parâmetro e retorna a imagem no tamanho padrão (geralmente 128x128 ou 1024x1024) ou pode até quebrar o link dependendo de como a URL foi montada.
+
+### Os tamanhos aceitos são:
+`16, 32, 64, 128, 256, 512, 1024, 2048, 4096`
+
+---
+
+### Como resolver no seu código Elixir?
+
+Para que o seu bot seja "à prova de erros", você deve forçar o tamanho escolhido pelo usuário para a potência de 2 mais próxima (ou apenas validar). 
+
+Aqui está uma forma elegante de ajustar a sua função `extract_avatar_args` para aceitar apenas os tamanhos válidos:
+
+```elixir
+defp extract_avatar_args(content) do
+  mention_regex = ~r/&lt;@!?(\d+)/
+  # Lista de tamanhos permitidos pela API do Discord
+  valid_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+  
+  with [mention, user_id_str] &lt;- Regex.run(mention_regex, content),
+       rest &lt;- String.replace(content, mention, ""),
+       [size_str] &lt;- Regex.run(~r/\d+/, rest),
+       {user_id, _} &lt;- Integer.parse(user_id_str),
+       {size, _} &lt;- Integer.parse(size_str),
+       # Verifica se o tamanho fornecido está na lista oficial
+       true &lt;- size in valid_sizes do
+    {:ok, user_id, size}
+  else
+    _ - :error
+  end
+end
+```
+
+### Dica de UX para o seu Bot:
+Se o usuário digitar `!avatar @user 300`, em vez de dar erro, você pode arredondar para o próximo nível:
+
+```elixir
+# Exemplo de lógica para arredondar para a potência de 2 mais próxima
+defp normalize_size(size) do
+  [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+  | Enum.filter(&(&1 = size))
+  | List.first() || 4096
+end
+```
+
+**Resumindo:** O Discord é rígido com esses valores para otimizar o carregamento das imagens nos servidores deles. Se não for potência de 2, a CDN não processa o redimensionamento.
+
+
+Usuário:
+
+melhorou, mas podemos melhorar nossa mensagem dizendo quais tamanhos são aceitáveis
+
+
+IA:
+
+Estou revisando isso. A clareza sobre os tamanhos permitidos é fundamental para evitar confusão.
+
+
+
+Com certeza, essa é uma excelente melhoria de UX (Experiência do Usuário). Informar os valores válidos no momento do erro ajuda o usuário a corrigir o comando imediatamente sem precisar adivinhar.
+
+Aqui está como ajustar a função `send_error_message` e a lógica de validação para deixar isso bem claro:
+
+### 1. Atualizando a validação e a mensagem de erro
+No seu `Commands.avatar/1`, vamos passar a lista de tamanhos aceitáveis para a mensagem de erro.
+
+```elixir
+  def avatar(%{content: content, channel_id: channel_id, guild_id: guild_id} = _msg) do
+    # Lista oficial de potências de 2 aceitas pela CDN do Discord
+    valid_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+    sizes_str = Enum.join(valid_sizes, ", ")
+
+    content
+    | extract_avatar_args(valid_sizes)
+    | case do
+      {:ok, user_id, size} -
+        with {:ok, member, user} &lt;- get_user_info(user_id, guild_id),
+             {:ok, avatar_url, user} &lt;- build_avatar_url(member, user, guild_id, size) do
+          send_avatar_embed(channel_id, avatar_url, user, size)
+        else
+          _ - send_error_message(channel_id, "Não foi possível obter os dados do usuário.")
+        end
+
+      :error -
+        send_error_message(
+          channel_id, 
+          "Uso: `!avatar &lt;@usuario `\n\n**Tamanhos aceitáveis:**\n`#{sizes_str}`"
+        )
+    end
+  end
+```
+
+### 2. Ajuste na `extract_avatar_args`
+Agora a função recebe a lista `valid_sizes` para validar o input:
+
+```elixir
+  defp extract_avatar_args(content, valid_sizes) do
+    mention_regex = ~r/&lt;@!?(\d+)/
+    
+    with [mention, user_id_str] &lt;- Regex.run(mention_regex, content),
+         rest &lt;- String.replace(content, mention, ""),
+         [size_str] &lt;- Regex.run(~r/\d+/, rest),
+         {user_id, _} &lt;- Integer.parse(user_id_str),
+         {size, _} &lt;- Integer.parse(size_str),
+         true &lt;- size in valid_sizes do
+      {:ok, user_id, size}
+    else
+      _ - :error
+    end
+  end
+```
+
+### Como fica o resultado no Discord:
+Se o usuário digitar `!avatar @user 300`, o bot responderá com um Embed vermelho:
+
+ **❌ Erro**
+ Uso: `!avatar &lt;@usuario `
+
+ **Tamanhos aceitáveis:**
+ `16, 32, 64, 128, 256, 512, 1024, 2048, 4096`
+
+### Dica extra:
+Se você quiser ser ainda mais amigável, pode fazer o bot **ignorar** se o usuário não digitar o tamanho e usar um padrão (ex: 1024). Para isso, bastaria mudar o `with` para aceitar a ausência do `size_str` e definir um valor *default*.
+
+Quer que eu ajude a implementar esse valor padrão caso o usuário esqueça de digitar o tamanho?
+
+
+Usuário:
+
+ao inves de refatorar tudo isso, não poderiamos na mensagem de erro envia a lista de tamanhos disponiveis e assim usá-la na mensagem?
+
+
+IA:
+
+Estou considerando essa abordagem. A clareza na comunicação de erros economiza bastante tempo de depuração.
+
+
+
+Com certeza! Essa é a abordagem mais eficiente e "limpa", pois você centraliza a informação em um único lugar e evita ter que passar listas de um lado para o outro entre as funções.
+
+Podemos definir a lista de tamanhos aceitáveis diretamente na sua função de erro. Assim, qualquer falha na validação (seja porque o tamanho não é potência de 2 ou porque o usuário esqueceu de digitar) disparará a mesma instrução clara.
+
+Aqui está como ficariam os trechos ajustados no seu `Commands.avatar/1`:
+
+### 1. No comando principal `avatar/1`
+Ajustamos apenas a mensagem de erro para ser dinâmica:
+
+```elixir
+def avatar(%{content: content, channel_id: channel_id, guild_id: guild_id} = _msg) do
+  content
+  | extract_avatar_args()
+  | case do
+    {:ok, user_id, size} -
+      with {:ok, member, user} &lt;- get_user_info(user_id, guild_id),
+           {:ok, avatar_url, user} &lt;- build_avatar_url(member, user, guild_id, size) do
+        send_avatar_embed(channel_id, avatar_url, user, size)
+      else
+        _ - send_error_message(channel_id, "Não foi possível obter os dados do usuário.")
+      end
+
+    :error -
+      # Centralizamos a lista aqui para a mensagem de erro
+      valid_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+      sizes_str = Enum.join(valid_sizes, ", ")
+      
+      send_error_message(
+        channel_id, 
+        "Uso: `!avatar &lt;@usuario `\n\n**Tamanhos aceitáveis (potências de 2):**\n`#{sizes_str}`"
+      )
+  end
+end
+```
+
+### 2. Na função de extração `extract_avatar_args`
+Ela continua fazendo o "trabalho sujo" de validar se o número está na lista:
+
+```elixir
+defp extract_avatar_args(content) do
+  mention_regex = ~r/&lt;@!?(\d+)/
+  valid_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+  
+  with [mention, user_id_str] &lt;- Regex.run(mention_regex, content),
+       rest &lt;- String.replace(content, mention, ""),
+       [size_str] &lt;- Regex.run(~r/\d+/, rest),
+       {user_id, _} &lt;- Integer.parse(user_id_str),
+       {size, _} &lt;- Integer.parse(size_str),
+       true &lt;- size in valid_sizes do
+    {:ok, user_id, size}
+  else
+    _ - :error
+  end
+end
+```
+
+### Por que isso é melhor?
+1.  **Manutenibilidade:** Se o Discord um dia aceitar o tamanho `8192`, você só precisa adicionar esse número na lista `valid_sizes` em dois lugares simples.
+2.  **Didática:** O usuário não recebe apenas um "Erro", ele recebe um mini-tutorial de como usar o comando corretamente.
+3.  **Consistência:** Você garante que o bot nunca tentará gerar uma URL que a CDN do Discord vai rejeitar.
+
+**Dica visual:** No Discord, colocar os números entre crases (como fiz no código: `` `#{sizes_str}` ``) faz com que eles apareçam como blocos de código, o que destaca muito bem a informação dentro do Embed!
+
+
+Usuário:
+
+agora vamos para nossa próxima feature:
+!kick   — expulsa determinado usuário especificando o motivo.
+
+
+IA:
+
+Estou analisando essa nova funcionalidade.
+
+
+
+Excelente escolha! O comando de moderação `!kick` é essencial. Seguindo o padrão que estabelecemos, precisamos lidar com a extração da menção do usuário e do texto do motivo, além de tratar as permissões do Discord.
+
+Aqui está a implementação para o seu módulo `Commands` e a atualização do `Consumer`.
+
+### 1. Implementação no `Davibot.Commands`
+
+Nesta função, usamos uma regex para capturar o ID do usuário e pegamos o restante da string como o motivo. Também adicionei um tratamento para o erro `403 Forbidden`, que acontece se o bot não tiver permissão para expulsar aquele membro (ex: o membro tem um cargo maior que o do bot).
+
+
+
+### 2. Atualização no `Davibot.Consumer`
+
+Agora, basta adicionar a cláusula no seu `Consumer` para reconhecer o comando `!kick`.
+
+
+
+### Notas importantes sobre essa implementação:
+
+1.  **Regex de Menção:** Usei `~r/&lt;@!?([0-9]+)/` para garantir que funcione tanto com menções normais quanto com menções que tenham o `!` (apelidos).
+2.  **Motivo Opcional:** O código verifica se há texto após a menção. Se o usuário digitar apenas `!kick @alguem`, o bot usará "Motivo não especificado" automaticamente.
+3.  **Audit Log:** O motivo é enviado no parâmetro `audit_log_reason`. Isso é ótimo porque o motivo aparecerá no **Registro de Auditoria** oficial do servidor do Discord, e não apenas no chat.
+4.  **Segurança:** Lembre-se que para este comando funcionar, o cargo do seu bot no Discord deve ter a permissão **"Expulsar Membros" (Kick Members)** e estar acima do cargo da pessoa que ele está tentando expulsar.
+
+O que achou dessa estrutura? Se quiser, podemos adicionar uma verificação extra para garantir que apenas administradores possam usar esse comando!
+
+
+Usuário:
+
+%Nostrum.Snowflake{} = guild_id  # Nostrum retorna {:ok} ou :ok dependendo da versão, verifique sua doc
+        embed = %Nostrum.Struct.Embed{
+          title: "✅ Sucesso!",
+          description: "O usuário &lt;@#{user_id} foi expulso.\n**Motivo:** #{reason}",
+          color: 0x00FF00
+        }
+        Nostrum.Api.create_message(message.channel_id, embeds: [embed])
+
+      {:error, %{status: 403}} -
+        send_error_message(message.channel_id, "Eu não tenho permissão para expulsar este membro (cargo maior ou falta de permissão).")
+
+      {:error, error} -
+        send_error_message(message.channel_id, "Erro ao expulsar: #{inspect(error)}")
+    end
+  else
+    {:error, msg} -
+      send_error_message(message.channel_id, msg)
+
+    nil -
+      send_error_message(message.channel_id, "Este comando só pode ser usado dentro de um servidor.")
+  end
+end
+```
+
+### O que mudou:
+1.  **Remoção da Struct Inexistente:** Troquei `%Nostrum.Snowflake{} = guild_id` por `guild_id when not is_nil(guild_id)`. Isso apenas garante que o comando não rode se o `guild_id` for nulo (como em uma DM).
+2.  **Tratamento de Erro 403:** Adicionei um caso específico para o erro `403 Forbidden`. É o erro mais comum no `!kick`, que acontece quando o bot tenta expulsar alguém que tem um cargo maior que o dele.
+3.  **Ajuste na API:** Usei `Nostrum.Api.kick_member` (ou apenas `kick`, dependendo da sua versão), garantindo que o `audit_log_reason` seja passado corretamente para aparecer nos registros do servidor.
+
+**Dica:** Se você quiser garantir que o ID seja realmente um Snowflake válido (um inteiro positivo), você pode usar `is_integer(guild_id)` na guarda do `with`.
+
+
+Usuário:
+
+estamos quase lá, eu usei o seguinte comando:
+!kick @ademiro taoff
+mas o bot dá o seguinte erro:
+Erro
+O primeiro argumento deve ser uma menção válida (ex: ).
+
+Vale ressaltar que eleestá com cargo que pode expulsar membros
+
+
+IA:
+
+Estou analisando a mensagem.
+
+
+
+O erro está ocorrendo na lógica do `extract_kick_args`. Quando você digita `!kick @ademiro taoff`, o Discord envia o conteúdo da mensagem para o bot e, dependendo de como o comando foi processado antes de chegar na função, o `String.split` pode estar separando o comando do resto de forma que a "menção" não seja o primeiro item da lista, ou a Regex não está encontrando o padrão esperado.
+
+No Elixir, quando usamos `String.split(content, ~r/\s+/)`, o primeiro elemento (`index 0`) será o próprio comando `!kick`. Por isso, sua função `extract_kick_args` falha ao tentar validar a menção no primeiro argumento.
+
+Aqui está a correção para a sua função de extração no módulo `Davibot.Commands`:
+
+### Correção da Função `extract_kick_args`
+
+```elixir
+defp extract_kick_args(content) do
+  # Divide a string por espaços
+  # Ex: ["!kick", "&lt;@123456789", "taoff"]
+  args = String.split(content, ~r/\s+/, trim: true)
+
+  case args do
+    [_comando, mention | rest] -
+      # Tenta capturar o ID da menção no SEGUNDO elemento da lista
+      case Regex.run(~r/&lt;@!?(\d+)/, mention) do
+        [_, user_id_str] -
+          reason = if rest == [], do: "Motivo não especificado", else: Enum.join(rest, " ")
+          {:ok, String.to_integer(user_id_str), reason}
+
+        _ -
+          {:error, "O primeiro argumento após o comando deve ser uma menção válida (ex: &lt;@user)."}
+      end
+
+    _ -
+      {:error, "Uso correto: `!kick &lt;@usuario `"}
+  end
+end
+```
+
+### Por que isso resolve o problema?
+
+1.  **Ignora o Comando:** Na estrutura `[_comando, mention | rest]`, o Elixir descarta o primeiro item (o `!kick`) e foca no que realmente importa: a menção e o motivo.
+2.  **Regex Flexível:** A regex `~r/&lt;@!?(\d+)/` com o `!?` garante que o bot entenda a menção mesmo se o usuário tiver um apelido no servidor (o que adiciona um `!` no código da menção).
+3.  **Tratamento de Espaços:** O `trim: true` no `String.split` evita que espaços duplos gerem elementos vazios na lista, o que costuma quebrar comandos de chat.
+
+### Dica de Depuração
+Se o erro persistir, adicione um `IO.inspect(args)` logo após o `String.split` para ver exatamente como o Elixir está "enxergando" a sua mensagem. Isso ajuda a ajustar a posição dos argumentos se houver algum prefixo no seu bot.
+
+
+Usuário:
+
+gem, deu certo mas com ressalvas, veja o que o supervisor disse:
+19:08:43.148 [warning] Request to "/guilds/836719714373074984/members/331552362441474050" queued by {#PID, #Reference} was closed abnormally with reason closed, requeueing
+19:08:43.148 [warning] Retrying request for reason abnormal_close with no known ratelimit information to "/guilds/836719714373074984/members/331552362441474050" queued by {#PID, #Reference} in 1000ms
+19:08:44.817 [error] Error in event handler: ** (CaseClauseError) no case clause matching:
+    {:ok}
+    (davibot 0.1.0) lib/davibot/commands.ex:290: Davibot.Commands.kick/1
+    (davibot 0.1.0) deps/nostrum/lib/nostrum/consumer.ex:448: anonymous fn/1 in Davibot.Consumer.handle_info/2
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+
+IA:
+
+Estou analisando esses logs e o erro que apareceu.
+
+
+
+O erro `(CaseClauseError) no case clause matching: {:ok}` indica que a função `Nostrum.Api.kick_member/3` retornou exatamente a tupla `{:ok}`, mas o seu código estava esperando apenas o átomo `:ok` ou outro formato.
+
+Na biblioteca Nostrum, muitas funções de modificação retornam `{:ok}` (uma tupla com um único elemento) para confirmar o sucesso.
+
+Aqui está a correção para o bloco `case` dentro da sua função `kick/1`:
+
+```elixir
+def kick(message) do
+  with {:ok, user_id, reason} &lt;- extract_kick_args(message.content),
+       guild_id when not is_nil(guild_id) &lt;- message.guild_id do
+    
+    # Ajustado para aceitar {:ok} que causou o erro de matching
+    case Nostrum.Api.kick_member(guild_id, user_id, audit_log_reason: reason) do
+      {:ok} - 
+        embed = %Nostrum.Struct.Embed{
+          title: "✅ Sucesso!",
+          description: "O usuário &lt;@#{user_id} foi expulso.\n**Motivo:** #{reason}",
+          color: 0x00FF00
+        }
+        Nostrum.Api.create_message(message.channel_id, embeds: [embed])
+
+      {:error, %{status: 403}} -
+        send_error_message(message.channel_id, "Erro 403: O bot não tem permissão para expulsar este membro (verifique a hierarquia de cargos).")
+
+      {:error, error} -
+        send_error_message(message.channel_id, "Erro ao expulsar: #{inspect(error)}")
+    end
+  else
+    {:error, msg} -
+      send_error_message(message.channel_id, msg)
+
+    nil -
+      send_error_message(message.channel_id, "Este comando só pode ser usado dentro de um servidor.")
+  end
+end
+```
+
+### O que foi corrigido:
+*   **Match de Sucesso:** Alterei de `:ok` (ou o que estava anteriormente) para `{:ok}`. Isso resolve o `CaseClauseError` reportado pelo seu log.
+*   **Logs de Warning:** Os avisos de `requeueing` e `retrying` que você viu antes do erro são comportamentos normais do Nostrum tentando manter a conexão estável com o Discord quando uma requisição fecha inesperadamente; o bot processou o kick logo em seguida, mas travou ao tentar ler a resposta de sucesso. Com essa mudança, ele passará a reconhecer o retorno corretamente.
+
+
+Usuário:
+
+vamos usar de comparação a função de avatar. Ela retorna algo?
+
+def avatar(%{content: content, channel_id: channel_id, guild_id: guild_id} = _msg) do
+    content
+    | extract_avatar_args()
+    | case do
+      {:ok, user_id, size} -
+        # Agora recebemos member e user
+        with {:ok, member, user}  send_avatar_embed(channel_id, "Não foi possível obter os dados do usuário.")
+        end
+
+      :error -
+        valid_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+        sizes_str = Enum.join(valid_sizes, ", ")
+        send_avatar_embed(channel_id, "Uso: `!avatar  `\n\n**Tamanhos aceitáveis (potências de 2):**\n`#{sizes_str}`")
+    end
+  end
+
+
+IA:
+
+Estou analisando o código fornecido.
+
+
+
+Analisando a estrutura da sua função `avatar/1`, a resposta curta é: **ela retorna o resultado da última função chamada em cada caminho do `case`**, mas para o funcionamento do bot, o que importa é o **efeito colateral** (o envio da mensagem para o Discord).
+
+Aqui está o detalhamento técnico do que acontece:
+
+### 1. O Retorno "Técnico" (Elixir)
+No Elixir, toda função retorna o valor da sua última expressão. No seu código:
+*   Se o comando der certo, ela retorna o que `send_avatar_embed/4` retornar.
+*   Se der erro, ela retorna o que `send_error_message/2` (ou `send_avatar_embed` no seu exemplo) retornar.
+
+Geralmente, as funções da `Nostrum.Api` retornam tuplas como `{:ok, %Nostrum.Struct.Message{}}` ou `{:error, reason}`. Portanto, sua função `avatar` retornará uma dessas tuplas.
+
+### 2. O Retorno "Funcional" (Discord)
+Para o usuário no Discord, a função "retorna" uma mensagem visual (o Embed). 
+No entanto, notei um **pequeno erro de lógica** no trecho que você postou que pode causar confusão:
+
+```elixir
+else
+  # Aqui você está passando uma STRING onde a função espera 
+  # (channel_id, avatar_url, user, size)
+  _ - send_avatar_embed(channel_id, "Não foi possível obter os dados do usuário.")
+end
+```
+
+### 3. Comparação com o `kick/1`
+A principal diferença entre as duas é o que elas fazem na API do Discord:
+*   **`avatar`**: É uma função de **leitura/exibição**. Ela busca dados e "retorna" (envia) uma imagem. O sucesso é garantido se o usuário existir.
+*   **`kick`**: É uma função de **ação/alteração**. Ela tenta modificar o estado do servidor. Ela retorna algo muito importante para o seu código: **o status da tentativa**.
+    *   Se o `kick` retornar `{:ok}`, você envia a confirmação.
+    *   Se o `kick` retornar `{:error, ...}`, você envia o erro.
+
+### Resumo
+Sua função `avatar` **retorna uma tupla de confirmação da API**, mas você não usa esse valor para nada (o que é normal em bots de comando simples). O objetivo dela é apenas disparar o `send_avatar_embed`.
+
+**Dica:** Se você quiser que o `Consumer` saiba se o comando funcionou ou não, você poderia terminar a função com o resultado do `case`, mas como você já trata os erros enviando mensagens de "Uso correto" ou "Erro", o fluxo já está completo!
+
+
+Usuário:
+
+Mas vamos rever a nossa função kick, ela quebra no meio, ela consegue excluir mas ela não gera a mensagem
+
+
+IA:
+
+Estou verificando a função kick.
+
+
+
+O erro que você está enfrentando agora é um clássico de **fluxo de execução** no Elixir.
+
+O log `(CaseClauseError) no case clause matching: {:ok}` diz exatamente o que aconteceu: o bot **conseguiu** expulsar o usuário (por isso a API retornou `{:ok}`), mas como o seu código não tinha uma "caixa" (cláusula) preparada para receber esse `{:ok}`, ele "quebrou" (crashou) antes de chegar na linha que envia a mensagem de sucesso.
+
+Aqui está a função `kick/1` corrigida e blindada para que isso não aconteça mais:
+
+```elixir
+def kick(message) do
+  with {:ok, user_id, reason} &lt;- extract_kick_args(message.content),
+       guild_id when not is_nil(guild_id) &lt;- message.guild_id do
+    
+    # O segredo está aqui: Nostrum retorna {:ok} em tupla unitária para o kick
+    case Nostrum.Api.kick_member(guild_id, user_id, audit_log_reason: reason) do
+      {:ok} - 
+        embed = %Nostrum.Struct.Embed{
+          title: "✅ Sucesso!",
+          description: "O usuário &lt;@#{user_id} foi expulso.\n**Motivo:** #{reason}",
+          color: 0x00FF00
+        }
+        # Usamos create_message para confirmar o envio
+        Nostrum.Api.create_message(message.channel_id, embeds: [embed])
+
+      {:error, %{status: 403}} -
+        send_error_message(message.channel_id, "Erro 403: O bot não tem permissão para expulsar este membro. Verifique se o meu cargo está acima do dele.")
+
+      {:error, error} -
+        send_error_message(message.channel_id, "Erro ao expulsar: #{inspect(error)}")
+    end
+  else
+    {:error, msg} -
+      send_error_message(message.channel_id, msg)
+
+    nil -
+      send_error_message(message.channel_id, "Este comando só pode ser usado dentro de um servidor.")
+  end
+end
+```
+
+### Por que a mensagem não aparecia?
+No Elixir, se uma função encontra um valor que ela não sabe como tratar (o seu `case` antigo esperava `:ok` mas recebeu `{:ok}`), ela interrompe a execução imediatamente e gera um erro no console. 
+
+Como o envio da mensagem (`Nostrum.Api.create_message`) vinha **depois** desse reconhecimento, o bot "morria" antes de conseguir falar no chat que deu certo.
+
+### Comparação com o Avatar:
+A função de `avatar` não quebrava porque ela é uma função de **leitura**. Ela não depende de uma resposta de "sucesso de ação" do Discord para continuar; ela simplesmente monta a URL e envia. Já o `kick` é uma **transação**: o bot precisa ter certeza de que o Discord aceitou a expulsão para poder comemorar no chat.
+
+Agora, com o match em `{:ok}`, o fluxo será completado e a mensagem aparecerá! Pode testar novamente.
+
+
+Usuário:
+
+https://hexdocs.pm/nostrum/Nostrum.Api.Guild.html#kick_member/3-examples
+Esse é o link da documentação da função kick_member, valide
+
+
+IA:
+
+Estou verificando o link que você enviou.
+
+
+
+Validado! A documentação oficial da Nostrum (versão v0.10.4) confirma exatamente o que suspeitávamos sobre o erro de compilação e o retorno da função.
+
+Aqui estão os pontos técnicos confirmados:
+
+### 1. O Retorno é `{:ok}`
+A especificação da função `kick_member/3` é:
+```elixir
+@spec kick_member(
+  Nostrum.Struct.Guild.id(),
+  Nostrum.Struct.User.id(),
+  Nostrum.Struct.Guild.AuditLogEntry.reason()
+) :: Nostrum.Api.error() | {:ok}
+```
+Isso explica por que o seu `case` quebrava ao tentar dar match em `:ok`. O Discord não retorna dados ao expulsar alguém, apenas confirma que a operação foi concluída, e a Nostrum padroniza isso como uma tupla unitária `{:ok}`.
+
+### 2. Argumentos e Ordem
+A função espera:
+1.  `guild_id` (Snowflake/Inteiro)
+2.  `user_id` (Snowflake/Inteiro)
+3.  `reason` (String opcional para o Audit Log)
+
+**Importante:** Note que na documentação o terceiro argumento é apenas a string do motivo (`reason`), e não uma lista de opções como `audit_log_reason: reason`. 
+
+### Como deve ficar o seu código final (Versão Definitiva):
+
+```elixir
+def kick(message) do
+  with {:ok, user_id, reason} &lt;- extract_kick_args(message.content),
+       guild_id when is_integer(guild_id) &lt;- message.guild_id do
+    
+    # Chamada corrigida conforme a documentação oficial
+    case Nostrum.Api.Guild.kick_member(guild_id, user_id, reason) do
+      {:ok} - 
+        embed = %Nostrum.Struct.Embed{
+          title: "✅ Sucesso!",
+          description: "O usuário &lt;@#{user_id} foi expulso.\n**Motivo:** #{reason}",
+          color: 0x00FF00
+        }
+        Nostrum.Api.create_message(message.channel_id, embeds: [embed])
+
+      {:error, %{status: 403}} -
+        send_error_message(message.channel_id, "Erro 403: Permissão negada. Verifique se meu cargo está acima do usuário.")
+
+      {:error, error} -
+        send_error_message(message.channel_id, "Erro ao expulsar: #{inspect(error)}")
+    end
+  else
+    {:error, msg} - send_error_message(message.channel_id, msg)
+    _ - send_error_message(message.channel_id, "Comando disponível apenas em servidores.")
+  end
+end
+```
+
+### O que mudou com a validação:
+*   **Retorno:** Agora o match está em `{:ok}`, o que evita o crash do supervisor.
+*   **Argumentos:** Removi o `audit_log_reason:` e passei apenas a variável `reason`, já que a função `kick_member/3` aceita a string diretamente como terceiro parâmetro.
+*   **Namespace:** Usei `Nostrum.Api.Guild.kick_member` para ser explícito, conforme o link que você enviou.
+
+Com essa estrutura baseada na documentação oficial, o comando deve rodar perfeitamente e gerar a mensagem de confirmação no chat!
+
+
+Usuário:
+
+def kick(message) do
+  with {:ok, user_id, reason} 
+        embed = %Nostrum.Struct.Embed{
+          title: "✅ Sucesso!",
+          description: "O usuário  foi kickado do servidor.\n**Motivo:** \"#{reason}\"",
+          color: 0x00FF00
+        }
+        Api.Message.create(message.channel_id, embed: embed)
+
+      {:error, error} -
+        send_avatar_embed(message.channel_id, "Falha ao kickar usuário: #{inspect(error)}")
+    end
+  else
+    {:error, msg} -
+      send_avatar_embed(message.channel_id, msg)
+
+    nil -
+      send_avatar_embed(message.channel_id, "Este comando só pode ser usado em servidores.")
+
+    _ -
+      send_avatar_embed(message.channel_id, "Erro inesperado.")
+  end
+end
+
+mas qual a diferença entre o meu e o seu?
+
+
+IA:
+
+Estou analisando o código que você enviou.
+
+
+
+A principal diferença entre o seu código e o que validamos na documentação está no **formato dos argumentos** passados para a função `kick_member/3`.
+
+Aqui estão os três pontos onde o seu código atual ainda pode falhar ou causar confusão:
+
+### 1. O Terceiro Argumento (O erro mais provável)
+Na documentação da Nostrum, a função `kick_member` espera que o terceiro argumento seja apenas a **String** do motivo, e não uma palavra-chave (keyword list).
+
+*   **Como está no seu:** `Api.Guild.kick_member(guild_id, user_id, reason)` — **Correto**, você já está passando a string diretamente.
+*   **Atenção:** Se em algum momento você tentou usar `audit_log_reason: reason` (como em outras funções da API), isso causaria um erro de tipo, pois a função esperaria uma String e receberia uma Lista.
+
+### 2. O Retorno `{:ok}` vs `:ok`
+Este foi o ponto que causou o crash no seu log anterior.
+*   **O seu código:** `case Api.Guild.kick_member(...) do {:ok} - ...`
+*   **Validação:** Está **correto**. Como vimos no erro `(CaseClauseError) no case clause matching: {:ok}`, a Nostrum retorna uma tupla com um único elemento. Se você usasse apenas `:ok`, ele continuaria quebrando.
+
+### 3. Uso de Funções de Erro (Confusão de Nomes)
+Notei que no seu bloco `else` e no tratamento de erro, você está chamando:
+```elixir
+send_avatar_embed(message.channel_id, "Falha ao kickar...")
+```
+*   **O Problema:** A função `send_avatar_embed` (que definimos para o comando de avatar) espera 4 argumentos: `(channel_id, avatar_url, user, size)`. 
+*   **O Resultado:** Ao passar apenas 2 argumentos (ID e uma String de erro), o Elixir vai dar um erro de **"function undefined"** ou **"wrong arity"**, e a mensagem de erro nunca chegará ao Discord.
+
+---
+
+### Como deveria ser o ajuste final para não quebrar:
+
+Para que o comando seja consistente, você deve usar a função `send_error_message/2` (ou criar uma genérica) que aceite apenas o ID do canal e o texto.
+
+```elixir
+# No seu Davibot.Commands
+
+def kick(message) do
+  with {:ok, user_id, reason} &lt;- extract_kick_args(message.content),
+       guild_id when is_integer(guild_id) &lt;- message.guild_id do
+    
+    case Nostrum.Api.Guild.kick_member(guild_id, user_id, reason) do
+      {:ok} -
+        embed = %Nostrum.Struct.Embed{
+          title: "✅ Sucesso!",
+          description: "O usuário &lt;@#{user_id} foi expulso.\n**Motivo:** \"#{reason}\"",
+          color: 0x00FF00
+        }
+        Nostrum.Api.create_message(message.channel_id, embeds: [embed])
+
+      {:error, %{status: 403}} -
+        send_error_message(message.channel_id, "Erro 403: Não tenho permissão para expulsar este membro.")
+
+      {:error, error} -
+        send_error_message(message.channel_id, "Erro na API: #{inspect(error)}")
+    end
+  else
+    {:error, msg} - send_error_message(message.channel_id, msg)
+    _ - send_error_message(message.channel_id, "Comando disponível apenas em servidores.")
+  end
+end
+
+# Certifique-se de ter esta função auxiliar genérica:
+defp send_error_message(channel_id, text) do
+  embed = %Nostrum.Struct.Embed{
+    title: "❌ Erro",
+    description: text,
+    color: 0xFF0000
+  }
+  Nostrum.Api.create_message(channel_id, embeds: [embed])
+end
+```
+
+**Resumo:** A diferença principal é que o seu código estava tentando usar uma função de "sucesso de avatar" para exibir "erros de kick", o que causava um conflito de argumentos (aridade) e impedia a mensagem de ser enviada. Além disso, o match em `{:ok}` agora está alinhado com a documentação oficial que você enviou.
+
+
+Usuário:
+
+gem, agora vamos fazer uma nova implementação:
+!xp  ele salva o id do usuário e acrescenta o xp dele e salva em um arquivo json. Caso exista, ele pega o valor e acrescenta o xp, se não adiciona o nome no json e coloca o valor como 0+1 e depois salva em json
+
+Se usar o !xp somente, vai listar todos os usuários e seus valores em ordem decrescente salvos no json anteriormente
+
+
+IA:
+
+Estou analisando a implementação. O salvamento em JSON com a lógica de adicionar ou criar entradas é um ponto interessante.
+
+
+
+Essa é uma funcionalidade excelente para gamificar o seu servidor! Para implementar o sistema de XP com persistência em JSON no Elixir, precisamos lidar com leitura/escrita de arquivos e manipulação de mapas.
+
+Como estamos trabalhando com um bot no Discord, o ideal é salvar o `user_id` (que é único) em vez do nome, para evitar problemas caso o usuário mude de apelido.
+
+Aqui está a implementação para o seu módulo `Commands`:
+
+### 1. Implementação no `Davibot.Commands`
+
+Vou dividir em três partes: a função principal, a lógica de atualização de XP e a listagem.
+
+```elixir
+  @xp_file "priv/repo/xp_data.json"
+
+  def xp(%{content: content, channel_id: channel_id} = msg) do
+    args = String.split(content, ~r/\s+/, trim: true)
+
+    case args do
+      # Caso: !xp (Listagem)
+      ["!xp"] -
+        list_xp(channel_id)
+
+      # Caso: !xp @user (Adicionar XP)
+      ["!xp", mention | _] -
+        case Regex.run(~r/&lt;@!?(\d+)/, mention) do
+          [_, user_id_str] -
+            update_user_xp(channel_id, user_id_str)
+          _ -
+            send_error_message(channel_id, "Menção inválida! Use `!xp &lt;@usuario`")
+        end
+
+      _ -
+        send_error_message(channel_id, "Uso: `!xp` para ver o ranking ou `!xp &lt;@usuario` para dar XP.")
+    end
+  end
+
+  # --- Lógica de Persistência ---
+
+  defp update_user_xp(channel_id, user_id) do
+    data = load_xp_data()
+    
+    # Pega o XP atual ou define como 0 se for novo
+    current_xp = Map.get(data, user_id, 0)
+    new_xp = current_xp + 1
+    
+    # Atualiza o mapa e salva
+    new_data = Map.put(data, user_id, new_xp)
+    save_xp_data(new_data)
+
+    Nostrum.Api.create_message(channel_id, "⭐ &lt;@#{user_id} agora tem **#{new_xp} XP**!")
+  end
+
+  defp list_xp(channel_id) do
+    data = load_xp_data()
+
+    if map_size(data) == 0 do
+      Nostrum.Api.create_message(channel_id, "📭 Ninguém tem XP ainda. Comece a usar `!xp @user`!")
+    else
+      # Ordena decrescente pelo valor (XP)
+      ranking = 
+        data
+        | Enum.sort_by(fn {_id, xp} - xp end, :desc)
+        | Enum.map_join("\n", fn {id, xp} - "• &lt;@#{id}: **#{xp} XP**" end)
+
+      embed = %Nostrum.Struct.Embed{
+        title: "🏆 Ranking de XP",
+        description: ranking,
+        color: 0xFFD700
+      }
+
+      Nostrum.Api.create_message(channel_id, embeds: [embed])
+    end
+  end
+
+  # --- Funções de Arquivo (JSON) ---
+
+  defp load_xp_data do
+    if File.exists?(@xp_file) do
+      @xp_file
+      | File.read!()
+      | Jason.decode!()
+    else
+      %{}
+    end
+  end
+
+  defp save_xp_data(data) do
+    # Garante que o diretório existe
+    File.mkdir_p!(Path.dirname(@xp_file))
+    
+    json_content = Jason.encode!(data, pretty: true)
+    File.write!(@xp_file, json_content)
+  end
+```
+
+### 2. Atualização no `Davibot.Consumer`
+
+Adicione a cláusula para o comando:
+
+```elixir
+  defp handle_message(%{content: &lt;&lt;"!xp", _::binary} = msg) do
+    IO.inspect("XP ACIONADO")
+    Commands.xp(msg)
+  end
+```
+
+### Pontos importantes desta implementação:
+
+1.  **Dependência `Jason`:** Certifique-se de que você tem a biblioteca `jason` no seu `mix.exs`, pois ela é a padrão para lidar com JSON no Elixir.
+    ```elixir
+    {:jason, "~ 1.4"}
+    ```
+2.  **Caminho do Arquivo:** Usei `"priv/repo/xp_data.json"`. É uma boa prática guardar dados persistentes na pasta `priv`.
+3.  **Ordenação:** A função `Enum.sort_by(..., :desc)` garante que os maiores valores de XP apareçam no topo da lista.
+4.  **Menções no Ranking:** No ranking, usamos `&lt;@ID`. O Discord transformará isso automaticamente no nome do usuário quando exibir a mensagem, o que é mais eficiente do que salvar nomes que podem mudar.
+
+**Dica:** Se o seu bot crescer muito, salvar em JSON pode ficar lento (pois ele lê e escreve o arquivo inteiro a cada ponto de XP). Para um servidor pequeno, funciona perfeitamente! Se precisar de algo maior no futuro, podemos migrar para um banco de dados como o **Ecto/PostgreSQL**.
+
+
+Usuário:
+
+certo, mas esqueci de mencionar uma coisa:
+além dos módulos consumer e commands, eu tenho o módulo store que ele tem a seguinte função: Salva e/ou lê dados de um arquivo JSON local
+Então se pudermos fazer cada função respentando a responsabilidade única, será melhor
+
+
+IA:
+
+Estou analisando o que você enviou.
+
+
+
+Para respeitar o princípio de **Responsabilidade Única (SRP)**, vamos separar a lógica em três partes: o **Consumer** (recebe o evento), o **Commands** (processa a regra de negócio e menções) e o **Store** (cuida exclusivamente do disco/JSON).
+
+Aqui está a implementação estruturada:
+
+### 1. Módulo `Davibot.Store`
+Este módulo não conhece o Discord; ele apenas sabe ler e salvar mapas em um arquivo.
+
+```elixir
+defmodule Davibot.Store do
+  @xp_file "priv/repo/xp_data.json"
+
+  @doc "Lê o arquivo JSON e retorna um mapa. Se não existir, retorna mapa vazio."
+  def load_xp do
+    if File.exists?(@xp_file) do
+      @xp_file | File.read!() | Jason.decode!()
+    else
+      %{}
+    end
+  end
+
+  @doc "Recebe um mapa e salva no arquivo JSON."
+  def save_xp(data) do
+    File.mkdir_p!(Path.dirname(@xp_file))
+    json_content = Jason.encode!(data, pretty: true)
+    File.write!(@xp_file, json_content)
+  end
+end
+```
+
+### 2. Módulo `Davibot.Commands`
+Este módulo processa os argumentos e decide o que fazer com os dados vindos da `Store`.
+
+```elixir
+defmodule Davibot.Commands do
+  alias Davibot.Store
+  alias Nostrum.Api
+
+  def xp(%{content: content, channel_id: channel_id}) do
+    case String.split(content, ~r/\s+/, trim: true) do
+      ["!xp"] - 
+        handle_list_xp(channel_id)
+
+      ["!xp", mention | _] - 
+        handle_add_xp(channel_id, mention)
+
+      _ - 
+        send_error_message(channel_id, "Uso: `!xp` ou `!xp &lt;@usuario`")
+    end
+  end
+
+  # Regra de negócio: Adicionar XP
+  defp handle_add_xp(channel_id, mention) do
+    case Regex.run(~r/&lt;@!?(\d+)/, mention) do
+      [_, user_id] -
+        data = Store.load_xp()
+        new_xp = Map.get(data, user_id, 0) + 1
+        
+        data 
+        | Map.put(user_id, new_xp) 
+        | Store.save_xp()
+
+        Api.create_message(channel_id, "⭐ &lt;@#{user_id} subiu para **#{new_xp} XP**!")
+
+      _ - 
+        send_error_message(channel_id, "Mencione um usuário válido.")
+    end
+  end
+
+  # Regra de negócio: Listar Ranking
+  defp handle_list_xp(channel_id) do
+    data = Store.load_xp()
+
+    if map_size(data) == 0 do
+      Api.create_message(channel_id, "Ranking vazio!")
+    else
+      ranking = data
+      | Enum.sort_by(fn {_id, xp} - xp end, :desc)
+      | Enum.map_join("\n", fn {id, xp} - "• &lt;@#{id}: **#{xp} XP**" end)
+
+      embed = %Nostrum.Struct.Embed{
+        title: "🏆 Ranking de XP",
+        description: ranking,
+        color: 0xFFD700
+      }
+      Api.create_message(channel_id, embeds: [embed])
+    end
+  end
+
+  defp send_error_message(channel_id, text) do
+    Api.create_message(channel_id, "❌ #{text}")
+  end
+end
+```
+
+### 3. Módulo `Davibot.Consumer`
+Apenas direciona o tráfego.
+
+```elixir
+defp handle_message(%{content: &lt;&lt;"!xp", _::binary} = msg) do
+  IO.inspect("XP COMANDO ACIONADO")
+  Commands.xp(msg)
+end
+```
+
+### Por que ficou melhor assim?
+1.  **Store:** Se você decidir trocar o arquivo JSON por um Banco de Dados (PostgreSQL) no futuro, você **só mexe no módulo Store**. O resto do bot nem vai saber da mudança.
+2.  **Commands:** Foca apenas em entender o que o usuário digitou e como responder no Discord.
+3.  **Manutenibilidade:** O código está limpo e cada erro (falha de leitura, menção errada, comando mal digitado) é tratado no seu devido lugar.
+
+**Lembrete:** Não esqueça de adicionar `:jason` nas suas dependências do `mix.exs` para que a `Store` consiga codificar/decodificar os arquivos!
+
+
+Usuário:
+
+# lib/davibot/commands.exs
+defmodule Davibot.Commands do
+  @moduledoc """
+  Aqui é implementado os comando do davibot
+  """
+  #alias Nostrum.Api.Message
+  alias Nostrum.Api
+
+  alias DaviBot.Store
+
+
+  @doc """
+  !calabreso - retona o gif do calma calabreso
+  """
+  def calabreso(%{channel_id: cid}) do
+    gif_url = "https://imgs.search.brave.com/7jfQ8IDvoNZdLt8966NScrKRAXLXCng7TLKro2Boifc/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9tZWRp/YS50ZW5vci5jb20v/TTRUNl9LSF9HV01B/QUFBTS9jYWxtYS1j/YWxhYnJlc28tY2Fs/bWEtY2FsbWEtY2Fs/YWJyZXNvLmdpZg.gif"
+    embed = %Nostrum.Struct.Embed{
+      title: "Toma, calabreso",
+      image: %Nostrum.Struct.Embed.Image{url: gif_url},
+      color: 0x00ff00
+    }
+    Api.Message.create(cid, embeds: [embed])
+  end
+
+  def roleta_russa(msg) do
+    #IO.inspect(Api.Guild.members(msg.guild_id, limit: 1000))
+    #IO.inspect(Api.Guild.get(msg.guild_id))
+    #IO.inspect(Api.Guild.integrations(msg.guild_id))
+    #IO.inspect(bot_id = Api.Self.application_information())
+    with {:ok, n} = n,
+         selected  Enum.take(n),
+         :ok  error_embed(reason)
+      false - error_embed("Not enough eligible members")
+    end
+  end
+
+  @doc """
+  Obtém o bot_id via Api.Self.application_information()
+  Retorna {:ok, bot_id} ou {:error, reason}
+  """
+  def get_bot_id do
+    with {:ok, %{bot: %{id: bot_id}}}  {:error, "Falha ao obter ID do bot"}
+    end
+  end
+
+  defp parse_number(content) do
+    case Regex.run(~r/!(roleta[-_\s]+russa)\s+(\d+)/i, String.trim(content)) do
+      [_, _, number_str] -
+        case Integer.parse(number_str) do
+          {n, ""} when n = 1 and n 
+            {:ok, n}
+          _ -
+            {:error, "Número inválido. Deve ser inteiro entre 1 e 500."}
+        end
+      _ -
+        {:error, "Formato inválido. Use: !roleta-russa "}
+    end
+  end
+
+
+  def filter_members(members, owner_id, bot_id) do
+    members
+    | Enum.filter(&(&1.user_id != owner_id))
+    | Enum.filter(&(&1.user_id != bot_id))
+  end
+
+  defp perform_bans(guild_id, selected) do
+    Enum.reduce_while(selected, :ok, fn member, _acc -
+      case ban_member(guild_id, member) do
+        :ok - {:cont, :ok}
+        {:error, reason} - {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp ban_member(guild_id, member) do
+    # Ajustado para retornar :ok puro conforme o padrão da API do Nostrum
+    case Api.Guild.ban_member(guild_id, member.user_id, 0, "roleta russa do davi brito") do
+      {:ok} -
+        IO.inspect("Banned user #{member.user_id}")
+        :ok
+      {:error, reason} -
+        IO.inspect("Failed to ban #{member.user_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp success_embed(n) do
+    %Nostrum.Struct.Embed{
+      title: "🎰 Roleta Russa!",
+      description: "💥 Banidos #{n} membros aleatórios com sucesso!",
+      color: 0xFF4444
+    }
+  end
+
+  defp error_embed(reason) do
+    %Nostrum.Struct.Embed{
+      title: "❌ Erro na Roleta Russa",
+      description: "Falha na operação: #{inspect(reason)}",
+      color: 0xFF0000
+    }
+  end
+
+  @doc """
+  Comando !sair - envia mensagem e sai do servidor
+  """
+  def sair(%{content: content, channel_id: channel_id, guild_id: guild_id}) do
+    content
+    | String.slice(6..-1)  # Remove "!sair " (6 caracteres)
+    | String.trim()
+    | case do
+      "" -
+        error_embed = %Nostrum.Struct.Embed{
+          title: "❌ Erro",
+          description: "Mensagem não pode ser vazia. Use: `!sair `",
+          color: 0xFF0000
+        }
+        Api.Message.create(channel_id, embeds: [error_embed])
+
+      msg_text -
+        confirm_embed = %Nostrum.Struct.Embed{
+          title: "🛑 Davibot está saindo do servidor!",
+          description: msg_text,
+          color: 0xFF9900
+        }
+
+      # Envia mensagem e logga com IO.inspect
+      channel_id
+      | Api.Message.create(embeds: [confirm_embed])
+      | tap(fn _ -
+        IO.inspect("Davibot saindo do servidor #{guild_id}: #{msg_text}", label: "SAÍDA")
+      end)
+      # Sai do servidor e logga
+      guild_id
+      | Api.Guild.leave()
+      | tap(fn _ -
+        IO.inspect("Davibot deixou o servidor #{guild_id}", label: "CONFIRMAÇÃO")
+      end)
+    end
+  end
+
+  @doc """
+  Comando !avatar - retorna avatar do usuário com tamanho específico
+  """
+  def avatar(%{content: content, channel_id: channel_id, guild_id: guild_id} = _msg) do
+    content
+    | extract_avatar_args()
+    | case do
+      {:ok, user_id, size} -
+        # Agora recebemos member e user
+        with {:ok, member, user}  send_avatar_embed(channel_id, "Não foi possível obter os dados do usuário.")
+        end
+
+      :error -
+        valid_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+        sizes_str = Enum.join(valid_sizes, ", ")
+        send_avatar_embed(channel_id, "Uso: `!avatar  `\n\n**Tamanhos aceitáveis (potências de 2):**\n`#{sizes_str}`")
+    end
+  end
+
+  @doc """
+  Extrai user_id da menção e tamanho do argumento
+  Regex:  ou 
+  """
+  defp extract_avatar_args(content) do
+    mention_regex = ~r//
+    # Lista de tamanhos permitidos pela API do Discord
+    valid_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+
+    with [mention, user_id_str]  :error
+    end
+  end
+
+
+  @doc """
+  Obtém info do usuário via API ou Cache
+  """
+  def get_user_info(user_id, guild_id) do
+  # Busca o membro (Cache ou API)
+    member_result =
+      case Nostrum.Cache.MemberCache.get(guild_id, user_id) do
+        {:ok, member} - {:ok, member}
+        {:error, _} - Nostrum.Api.Guild.member(guild_id, user_id)
+      end
+
+    # Busca o usuário (Cache ou API) para ter o objeto User completo
+    user_result =
+      case Nostrum.Cache.UserCache.get(user_id) do
+        {:ok, user} - {:ok, user}
+        {:error, _} - Nostrum.Api.User.get(user_id)
+      end
+
+    case {member_result, user_result} do
+      {{:ok, member}, {:ok, user}} - {:ok, member, user}
+      _ - :error
+    end
+  end
+
+  # Caso 1: Membro não possui avatar específico no servidor (avatar: nil)
+  defp build_avatar_url(%Nostrum.Struct.Guild.Member{avatar: nil}, user, _guild_id, size) do
+    url = Nostrum.Struct.User.avatar_url(user)  "?size=#{size}"
+    {:ok, url, user}
+  end
+
+  # Caso 2: Membro possui avatar específico no servidor
+  defp build_avatar_url(member, user, guild_id, size) do
+    url = Nostrum.Struct.Guild.Member.avatar_url(member, guild_id)  "?size=#{size}"
+    {:ok, url, user}
+  end
+
+  # Caso 3: Fallback de erro
+  defp build_avatar_url(_, _, _), do: :error
+
+  @doc """
+  Envia embed com avatar
+  """
+  defp send_avatar_embed(channel_id, avatar_url, user, size) do
+    username = user.username || "Usuário"
+
+    embed = %Nostrum.Struct.Embed{
+      title: "🖼️ Avatar de #{username}",
+      image: %Nostrum.Struct.Embed.Image{url: avatar_url},
+      color: 0x7289DA,
+      footer: %Nostrum.Struct.Embed.Footer{text: "Tamanho: #{size}x#{size} px"}
+    }
+
+    Api.Message.create(channel_id, embeds: [embed])
+  end
+
+  defp send_avatar_embed(channel_id, description) do
+    error_embed = %Nostrum.Struct.Embed{
+      title: "❌ Erro",
+      description: description,
+      color: 0xFF0000
+    }
+
+
+    Api.Message.create(channel_id, embeds: [error_embed])
+  end
+
+  defp extract_kick_args(content) do
+    # Divide a string por espaços
+    # Ex: ["!kick", "", "taoff"]
+    args = String.split(content, ~r/\s+/, trim: true)
+
+    case args do
+      [_comando, mention | rest] -
+        # Tenta capturar o ID da menção no SEGUNDO elemento da lista
+        case Regex.run(~r//, mention) do
+          [_, user_id_str] -
+            reason = if rest == [], do: "Motivo não especificado", else: Enum.join(rest, " ")
+            {:ok, String.to_integer(user_id_str), reason}
+
+          _ -
+            {:error, "O primeiro argumento após o comando deve ser uma menção válida (ex: )."}
+        end
+
+      _ -
+        {:error, "Uso correto: `!kick  `"}
+    end
+  end
+
+def kick(message) do
+  with {:ok, user_id, reason} 
+        embed = %Nostrum.Struct.Embed{
+          title: "✅ Sucesso!",
+          description: "O usuário  foi kickado do servidor.\n**Motivo:** \"#{reason}\"",
+          color: 0x00FF00
+        }
+        Api.Message.create(message.channel_id, embed: embed)
+
+      {:error, error} -
+        send_error_embed(message.channel_id, "Falha ao kickar usuário: #{inspect(error)}")
+    end
+    else
+      {:error, msg} -
+        send_error_embed(message.channel_id, msg)
+
+      nil -
+        send_error_embed(message.channel_id, "Este comando só pode ser usado em servidores.")
+
+      _ -
+        send_error_embed(message.channel_id, "Erro inesperado.")
+    end
+  end
+
+  defp send_error_embed(channel_id, text) do
+    embed = %Nostrum.Struct.Embed{
+      title: "❌ Erro",
+      description: text,
+      color: 0xFF0000
+    }
+    Api.Message.create(channel_id, embeds: [embed])
+  end
+
+  def xp(%{content: content, channel_id: channel_id}) do
+    case String.split(content, ~r/\s+/, trim: true) do
+      ["!xp"] -
+        handle_list_xp(channel_id)
+
+      ["!xp", mention | _] -
+        handle_add_xp(channel_id, mention)
+
+      _ -
+        send_error_message(channel_id, "Uso: `!xp` ou `!xp `")
+    end
+  end
+
+  # Regra de negócio: Adicionar XP
+  defp handle_add_xp(channel_id, mention) do
+    case Regex.run(~r//, mention) do
+      [_, user_id] -
+        data = Store.load_xp()
+        new_xp = Map.get(data, user_id, 0) + 1
+
+        data
+        | Map.put(user_id, new_xp)
+        | Store.save_xp()
+
+        Api.Message.create(channel_id, "⭐  subiu para **#{new_xp} XP**!")
+
+      _ -
+        send_error_message(channel_id, "Mencione um usuário válido.")
+    end
+  end
+
+  # Regra de negócio: Listar Ranking
+  defp handle_list_xp(channel_id) do
+    data = Store.load_xp()
+
+    if map_size(data) == 0 do
+      Api.Message.create(channel_id, "Ranking vazio!")
+    else
+      ranking = data
+      | Enum.sort_by(fn {_id, xp} - xp end, :desc)
+      | Enum.map_join("\n", fn {id, xp} - "• : **#{xp} XP**" end)
+
+      embed = %Nostrum.Struct.Embed{
+        title: "🏆 Ranking de XP",
+        description: ranking,
+        color: 0xFFD700
+      }
+      Api.create_message(channel_id, embeds: [embed])
+    end
+  end
+
+  defp send_error_message(channel_id, text) do
+    Api.create_message(channel_id, "❌ #{text}")
+  end
+
+
+end
+
+     warning: DaviBot.Store.load_xp/0 is undefined (module DaviBot.Store is not available or is yet to be defined). Did you mean:
+           * Davibot.Store.load_xp/0
+     │
+ 341 │         data = Store.load_xp()
+     │                      ~
+     │
+     └─ lib/davibot/commands.ex:341:22: Davibot.Commands.handle_add_xp/2
+     └─ lib/davibot/commands.ex:357:18: Davibot.Commands.handle_list_xp/1
+     warning: DaviBot.Store.save_xp/1 is undefined (module DaviBot.Store is not available or is yet to be defined). Did you mean:
+           * Davibot.Store.save_xp/1
+     │
+ 346 │         | Store.save_xp()
+     │                  ~
+     │
+     └─ lib/davibot/commands.ex:346:18: Davibot.Commands.handle_add_xp/2
+
+O que estou fazendo de errado?
+
+
+IA:
+
+Estou analisando o código e os avisos. Parece que há uma inconsistência nos nomes dos módulos.
+
+
+
+O erro é causado por uma pequena diferença de **letras maiúsculas e minúsculas** (case sensitivity). No Elixir, `DaviBot` e `Davibot` são considerados módulos diferentes.
+
+O seu aviso de compilação diz:
+`DaviBot.Store.load_xp/0 is undefined... Did you mean: Davibot.Store.load_xp/0`
+
+### Como corrigir:
+
+No seu arquivo `lib/davibot/commands.ex`, você tem a seguinte linha:
+```elixir
+alias DaviBot.Store  # O "B" está maiúsculo aqui
+```
+
+Mas o seu módulo provavelmente foi definido como:
+```elixir
+defmodule Davibot.Store do # O "b" está minúsculo aqui
+```
+
+**Basta alterar o alias no topo do arquivo `commands.ex` para:**
+
+```elixir
+alias Davibot.Store
+```
+
+---
+
+### Verificação de Consistência
+
+Para garantir que tudo funcione, verifique se os seus arquivos estão assim:
+
+#### 1. No arquivo `lib/davibot/store.ex` (ou `.exs`):
+Certifique-se de que o nome do módulo usa o "b" minúsculo:
+```elixir
+defmodule Davibot.Store do
+  # ... funções load_xp e save_xp
+end
+```
+
+#### 2. No arquivo `lib/davibot/commands.ex`:
+Ajuste o alias para combinar exatamente com o nome acima:
+```elixir
+defmodule Davibot.Commands do
+  alias Nostrum.Api
+  alias Davibot.Store # &lt;--- Ajustado aqui (b minúsculo)
+
+  # ... restante do código
+end
+```
+
+### Por que isso acontece?
+No Elixir, nomes de módulos são transformados em átomos internamente (ex: `:"Elixir.Davibot.Store"`). Como átomos são sensíveis a maiúsculas/minúsculas, `DaviBot` e `Davibot` apontam para endereços de memória diferentes. O compilador não encontra o `DaviBot` (com B maiúsculo) e sugere o que ele encontrou de nome similar.
+
+**Dica:** Tente manter sempre o padrão do nome do seu projeto (se o projeto é `davibot`, use sempre `Davibot` em todos os módulos).
+
+
+Usuário:
+
+@xp_file "priv/repo/xp_data.json"
+aqui eu coloco o caminho relativo? tipo ./store/xp_data.json?
+
+
+IA:
+
+Estou verificando isso.
+
+
+
+No Elixir, o comportamento do caminho do arquivo depende de como você inicia a aplicação, mas existem regras claras para garantir que o seu bot encontre o JSON corretamente:
+
+### 1. O Caminho Relativo
+Se você definir `@xp_file "./store/xp_data.json"`, o Elixir tentará encontrar a pasta `store` a partir da **raiz do seu projeto** (onde está o arquivo `mix.exs`). 
+
+*   **Vantagem:** É simples e direto.
+*   **Risco:** Se você rodar o bot de dentro de uma subpasta ou via script diferente, o caminho relativo pode quebrar.
+
+### 2. A Convenção da Pasta `priv`
+A sua definição original (`priv/repo/xp_data.json`) é a mais recomendada no ecossistema Elixir. A pasta `priv` é o local padrão para arquivos que não são código-fonte, mas que a aplicação precisa para rodar.
+
+Para tornar esse caminho **absoluto e seguro**, você deve usar a função `:code.priv_dir/1`. Isso garante que o bot encontre o arquivo mesmo após ser compilado ou movido.
+
+### Como configurar o Módulo Store de forma robusta:
+
+```elixir
+defmodule Davibot.Store do
+  # Busca o caminho absoluto da pasta priv do seu app :davibot
+  # Se o seu app no mix.exs tiver outro nome, troque :davibot pelo nome correto
+  @priv_dir :code.priv_dir(:davibot)
+  @xp_file Path.join([@priv_dir, "repo", "xp_data.json"])
+
+  def load_xp do
+    if File.exists?(@xp_file) do
+      @xp_file | File.read!() | Jason.decode!()
+    else
+      %{}
+    end
+  end
+
+  def save_xp(data) do
+    # Garante que a pasta priv/repo existe
+    File.mkdir_p!(Path.dirname(@xp_file))
+    
+    json_content = Jason.encode!(data, pretty: true)
+    File.write!(@xp_file, json_content)
+  end
+end
+```
+
+### Resumo da Recomendação:
+1.  **Use `priv/`**: É o local correto para dados locais.
+2.  **Evite `./`**: Caminhos que começam com ponto dependem do diretório onde o terminal está aberto, o que causa erros em produção.
+3.  **Use `Path.join`**: Ele lida com as barras `/` ou `\` automaticamente, seja no Windows ou Linux.
+
+Se você preferir manter a pasta `store/` na raiz do projeto (fora da `priv`), use `Path.expand("store/xp_data.json")` para converter o caminho relativo em absoluto no momento em que o bot inicia.
+
+
+Usuário:
+
+Agora vamos pra próxima feature:
+! plot  - chama omdb, pega o json do request e depois chama a ia para fazer um story telling e depois lança e dizer se o filme é bom usando as notas do rotten e dos demais
+
+
+IA:
+
+Estou analisando essa funcionalidade. A integração entre diferentes fontes de dados parece ser o ponto chave.
+
+
+
+Essa é uma funcionalidade fantástica! Para implementar o comando `!plot`, vamos seguir a lógica de buscar os dados (simulando a chamada à OMDB), processar com IA para criar um storytelling envolvente e, por fim, avaliar a qualidade do filme com base nas notas do Rotten Tomatoes, IMDb e Metacritic.
+
+Aqui está como a estrutura ficaria no seu bot:
+
+### 1. Implementação no `Davibot.Commands`
+
+Esta função realiza a busca, o processamento de texto e a formatação do Embed final.
+
+```elixir
+defmodule Davibot.Commands do
+  alias Nostrum.Api
+
+  @doc """
+  !plot  - Busca dados no OMDB, gera storytelling e avalia notas.
+  """
+  def plot(%{content: content, channel_id: channel_id}) do
+    # Extrai o nome do filme (remove o comando !plot)
+    movie_name = content | String.replace_prefix("!plot", "") | String.trim()
+
+    if movie_name == "" do
+      send_error_message(channel_id, "Uso: `!plot `")
+    else
+      # 1. Busca os dados (Aqui você chamaria sua função de API ou IA)
+      # Simulando o retorno do JSON da OMDB
+      case fetch_movie_data(movie_name) do
+        {:ok, movie_data} -
+          # 2. IA gera o Storytelling e a Avaliação
+          # (Aqui você integra com sua API de IA preferida)
+          {story, evaluation} = generate_ai_content(movie_data)
+
+          # 3. Envia o Embed final
+          send_plot_embed(channel_id, movie_data, story, evaluation)
+
+        {:error, _reason} -
+          send_error_message(channel_id, "Filme não encontrado ou erro na busca.")
+      end
+    end
+  end
+
+  # --- Funções Auxiliares ---
+
+  defp send_plot_embed(channel_id, movie, story, evaluation) do
+    embed = %Nostrum.Struct.Embed{
+      title: "🎬 #{movie.title} (#{movie.year})",
+      description: story,
+      thumbnail: %Nostrum.Struct.Embed.Thumbnail{url: movie.poster},
+      color: 0x1ABC9C,
+      fields: [
+        %{name: "⭐ Avaliação da IA", value: evaluation, inline: false},
+        %{name: "📊 Notas Reais", value: format_ratings(movie.ratings), inline: true}
+      ],
+      footer: %Nostrum.Struct.Embed.Footer{text: "Dados via OMDB & IA Storyteller"}
+    }
+
+    Api.Message.create(channel_id, embeds: [embed])
+  end
+
+  defp format_ratings(ratings) do
+    ratings
+    | Enum.map(fn {source, value} - "• **#{source}:** #{value}" end)
+    | Enum.join("\n")
+  end
+
+  # (Funções de busca e IA seriam implementadas aqui ou em módulos separados)
+end
+```
+
+### 2. Exemplo de Saída no Discord
+
+Ao digitar `!plot Matrix`, o bot responderia algo assim:
+
+---
+
+**🎬 The Matrix (1999)**
+ *Em um futuro neon e sombrio, a humanidade vive uma ilusão digital enquanto máquinas colhem sua energia. Thomas Anderson, o hacker Neo, descobre a verdade ao tomar a pílula vermelha e se torna a única esperança de liberdade...*
+
+**⭐ Avaliação da IA**
+O filme é uma obra-prima absoluta! Com uma trama filosófica e ação revolucionária, ele desafia a percepção da realidade. Com base nas notas altíssimas, é um **"Must Watch"** obrigatório.
+
+**📊 Notas Reais**
+• **Rotten Tomatoes:** 83%
+• **IMDb:** 8.7/10
+• **Metacritic:** 73/100
+
+---
+
+### 3. Atualização no `Davibot.Consumer`
+
+Adicione a rota para o comando:
+
+```elixir
+defp handle_message(%{content: &lt;&lt;"!plot", _::binary} = msg) do
+  IO.inspect("PLOT ACIONADO")
+  Commands.plot(msg)
+end
+```
+
+### Pontos de Atenção:
+1.  **API Key:** Para o `fetch_movie_data`, você precisará de uma chave da [OMDB API](http://www.omdbapi.com/apikey.aspx) (é gratuita).
+2.  **Storytelling:** A IA pode ser configurada para usar tons diferentes (épico, misterioso, engraçado) dependendo do gênero do filme.
+3.  **Notas:** O campo `Ratings` da OMDB vem como uma lista de mapas, o que facilita muito a extração dos valores do Rotten e do Metacritic.
+
+O que achou dessa abordagem? Se quiser, podemos detalhar a função de chamada HTTP para a OMDB!
+
+
+Usuário:
+
+vamos focar em usar o fetch_movie_data. vamos usar httpoison para fazer o resgate no omdb, eu já tenho a apikey e a url para fazer é:
+http://www.omdbapi.com/?apikey=[yourkey]&t=[nome-dofilme]
+
+
+IA:
+
+Estou analisando o seu pedido. Vou precisar de um momento para estruturar isso.
+
+
+
+Perfeito! Agora que temos a URL e a chave, vamos estruturar a função `fetch_movie_data/1` utilizando o **HTTPoison** para a requisição e o **Jason** para tratar o JSON de resposta.
+
+Para respeitar a **Responsabilidade Única**, essa função deve apenas buscar os dados brutos. A lógica de "storytelling" e "avaliação" ficará em outra função que chamaremos depois.
+
+### 1. Implementação no `Davibot.Commands`
+
+Aqui está como a função de busca deve ser escrita:
+
+```elixir
+defmodule Davibot.Commands do
+  # Substitua pela sua chave real ou use uma variável de ambiente
+  @omdb_api_key "SUA_CHAVE_AQUI" 
+
+  @doc """
+  Busca dados brutos de um filme na API OMDB.
+  """
+  def fetch_movie_data(movie_name) do
+    # Codifica o nome do filme para ser usado na URL (ex: "The Matrix" - "The%20Matrix")
+    query_name = URI.encode(movie_name)
+    url = "http://www.omdbapi.com/?apikey=#{@omdb_api_key}&t=#{query_name}"
+
+    case HTTPoison.get(url) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -
+        case Jason.decode(body) do
+          {:ok, %{"Response" = "True"} = data} -
+            {:ok, data}
+
+          {:ok, %{"Response" = "False", "Error" = reason}} -
+            {:error, reason}
+
+          {:error, _} -
+            {:error, "Erro ao processar dados do filme."}
+        end
+
+      {:ok, %HTTPoison.Response{status_code: code}} -
+        {:error, "Erro na API (Status: #{code})"}
+
+      {:error, %HTTPoison.Error{reason: reason}} -
+        {:error, "Falha na conexão: #{inspect(reason)}"}
+    end
+  end
+end
+```
+
+### 2. Como integrar no comando `!plot`
+
+Agora, o fluxo completo do comando no seu módulo ficaria assim:
+
+```elixir
+def plot(%{content: content, channel_id: channel_id}) do
+  movie_name = content | String.replace_prefix("!plot", "") | String.trim()
+
+  case fetch_movie_data(movie_name) do
+    {:ok, data} -
+      # Aqui você chamaria sua função de IA passando o 'data'
+      # Ex: {story, evaluation} = Davibot.AI.generate_story(data)
+      
+      # Por enquanto, vamos apenas confirmar que pegamos os dados
+      Api.Message.create(channel_id, "🎬 Filme encontrado: **#{data["Title"]}**! Agora vou gerar o storytelling...")
+
+    {:error, reason} -
+      send_error_message(channel_id, "Erro: #{reason}")
+  end
+end
+```
+
+### Pontos Importantes:
+1.  **Dependências:** Verifique se você adicionou `{:httpoison, "~ 2.0"}` e `{:jason, "~ 1.4"}` no seu `mix.exs`.
+2.  **Case Sensitivity:** Note que a OMDB retorna as chaves com a primeira letra maiúscula (ex: `"Title"`, `"Year"`, `"Ratings"`). No Elixir, acessamos como strings: `data["Title"]`.
+3.  **URL Encoding:** O uso do `URI.encode/1` é fundamental. Sem ele, filmes com espaços ou caracteres especiais (como "O Auto da Compadecida") fariam a requisição falhar.
+
+**Próximo passo:** Você já tem algum módulo ou API de IA (como OpenAI ou Google Gemini) configurado para fazer o storytelling, ou quer que eu ajude a estruturar essa chamada também?
+
+
+Usuário:
+
+certo mas antes, eu criei uma arquivo .env que por lá por exemplo, está guardado o token do bot mas queria como ficaria o arquivo caso incluice o token do omdb, seria assim?
+
+# config/runtime.exs
+import Config
+import Dotenvy
+
+source!([".env", System.get_env()])
+
+config :nostrum,
+  token: env!("DISCORD_TOKEN", :string!),
+  omdb: env!("OMDB_TOKEN", :string!)
+
+
+IA:
+
+Estou analisando seu código. A forma como você está buscando as variáveis de ambiente parece correta.
+
+
+
+Exatamente! Essa é a forma mais profissional e segura de gerenciar suas chaves no Elixir, utilizando o `runtime.exs` e a biblioteca `Dotenvy`.
+
+Ao adicionar o `OMDB_TOKEN` no seu `.env`, o seu arquivo `config/runtime.exs` ficaria exatamente como você descreveu. No entanto, para que o seu módulo `Commands` consiga ler essa configuração de forma eficiente (sem ter que consultar o sistema toda vez), o ideal é "puxar" esse valor para dentro da configuração da sua própria aplicação.
+
+Aqui está como você deve organizar:
+
+### 1. No seu arquivo `.env`
+Adicione a nova linha (certifique-se de não deixar espaços ao redor do `=`):
+```bash
+DISCORD_TOKEN=seu_token_do_discord_aqui
+OMDB_TOKEN=sua_chave_da_omdb_aqui
+```
+
+### 2. No seu `config/runtime.exs`
+Você pode organizar as configurações para que o seu app (`:davibot`) também tenha acesso à chave:
+
+```elixir
+import Config
+import Dotenvy
+
+source!([".env", System.get_env()])
+
+config :nostrum,
+  token: env!("DISCORD_TOKEN", :string!)
+
+# Adicione esta linha para o seu próprio app
+config :davibot,
+  omdb_api_key: env!("OMDB_TOKEN", :string!)
+```
+
+### 3. Como ler isso no `Davibot.Commands`
+Agora, em vez de deixar a chave fixa no código (hardcoded), você a busca dinamicamente da configuração que o `runtime.exs` carregou:
+
+```elixir
+defmodule Davibot.Commands do
+  # Busca a chave configurada no runtime.exs
+  # O primeiro argumento é o nome do seu app, o segundo é a chave que definimos
+  @omdb_api_key Application.compile_env(:davibot, :omdb_api_key)
+
+  def fetch_movie_data(movie_name) do
+    query_name = URI.encode(movie_name)
+    # Agora usamos a variável que veio do .env
+    url = "http://www.omdbapi.com/?apikey=#{@omdb_api_key}&t=#{query_name}"
+
+    case HTTPoison.get(url) do
+      # ... restante da lógica (Jason.decode, etc)
+    end
+  end
+end
+```
+
+### Por que fazer assim?
+1.  **Segurança:** Você nunca sobe suas chaves para o GitHub (lembre-se de adicionar o `.env` no seu `.gitignore`).
+2.  **Flexibilidade:** Se você precisar trocar a chave, basta alterar o arquivo `.env` e reiniciar o bot, sem precisar mexer em uma linha de código sequer.
+3.  **Performance:** Usar `Application.compile_env` ou definir no `runtime.exs` é muito mais rápido do que ficar lendo o arquivo de texto `.env` manualmente a cada comando.
+
+**Dica:** Se o comando `mix compile` reclamar que `@omdb_api_key` é `nil`, verifique se o nome do app no `mix.exs` é realmente `:davibot` (com todas as letras minúsculas). Se for diferente, ajuste o nome no `config` e no `get_env`.
+
+
+Usuário:
+
+agora vamos focar na 
+generate_ai_content, estou usando o pacote gemini_ex para fazer a requisição e pretendo passa todo reques e daí fazer o output dela
+
+
+IA:
+
+Estou preparando a resposta. A integração com pacotes de IA para gerar conteúdo é um avanço interessante.
+
+
+
+Excelente! Utilizar o `gemini_ex` é uma ótima escolha para processar esse tipo de conteúdo criativo.
+
+Para que a função `generate_ai_content/1` funcione de forma integrada, vamos instruir o Gemini a retornar um formato estruturado (JSON) para que possamos separar facilmente o **Storytelling** da **Avaliação** e montar o Embed no Discord.
+
+Aqui está a implementação sugerida para o seu módulo `Commands`:
+
+### 1. Implementação da Função com `GeminiEx`
+
+```elixir
+defmodule Davibot.Commands do
+  # ... outras funções (fetch_movie_data, etc)
+
+  @doc """
+  Recebe os dados do OMDB e usa o Gemini para gerar storytelling e avaliação.
+  """
+  def generate_ai_content(movie_data) do
+    # Preparamos os dados para o prompt
+    movie_info = Jason.encode!(movie_data)
+
+    prompt = """
+    Você é um contador de histórias e crítico de cinema. 
+    Com base nos seguintes dados do filme vindos da API OMDB:
+    #{movie_info}
+
+    Sua tarefa:
+    1. Crie um storytelling curto e envolvente (máximo 500 caracteres) sobre o enredo.
+    2. Faça uma avaliação dizendo se o filme é bom ou não, baseando-se estritamente nas notas do Rotten Tomatoes, IMDb e Metacritic presentes nos dados.
+
+    Responda APENAS com um JSON no seguinte formato (sem blocos de código markdown):
+    {
+      "story": "texto do storytelling",
+      "evaluation": "texto da avaliação"
+    }
+    """
+
+    # Chamada ao Gemini (ajuste o modelo conforme sua preferência)
+    case GeminiEx.generate_content(prompt, model: "gemini-1.5-flash") do
+      {:ok, %{candidates: [%{content: %{parts: [%{text: json_response}]}} | _]}} -
+        # Decodifica a resposta da IA
+        case Jason.decode(json_response) do
+          {:ok, %{"story" = story, "evaluation" = evaluation}} -
+            {story, evaluation}
+          _ -
+            {"Era uma vez um filme chamado #{movie_data["Title"]}...", "As notas indicam que é um filme interessante!"}
+        end
+
+      {:error, reason} -
+        IO.inspect(reason, label: "ERRO GEMINI")
+        {"Não foi possível gerar a história agora.", "Confira as notas abaixo."}
+    end
+  end
+end
+```
+
+### 2. Ajuste no `config/runtime.exs`
+
+Certifique-se de que a configuração do `gemini_ex` está correta no seu arquivo de runtime:
+
+```elixir
+config :gemini_ex,
+  api_key: env!("GEMINI_TOKEN", :string!)
+```
+
+### Por que essa estrutura?
+
+1.  **Prompt Estruturado:** Pedir para a IA responder em JSON é o "pulo do gato". Isso evita que ela mande textos extras como "Aqui está sua história:" e quebre o seu código.
+2.  **Fallback:** Adicionei um tratamento básico caso a IA falhe ou retorne algo fora do padrão, garantindo que o seu bot não "shute" (crash) e mande uma resposta genérica.
+3.  **Responsabilidade Única:** O `Commands.plot` agora apenas coordena: chama o `Store` (se precisar), chama o `fetch_movie_data`, passa para o `generate_ai_content` e envia o Embed.
+
+**Dica:** No prompt, eu usei `gemini-1.5-flash` por ser mais rápido e barato (ou gratuito, dependendo da sua cota), o que é ideal para comandos de chat em tempo real.
+
+Quer que eu monte a versão final do comando `plot/1` juntando todas essas peças?
+
+
+Usuário:
+
+@doc """
+  !plot  - Busca dados no OMDB, gera storytelling e avalia notas.
+  """
+  def plot(%{content: content, channel_id: channel_id}) do
+    # Extrai o nome do filme (remove o comando !plot)
+    movie_name = content | String.replace_prefix("!plot", "") | String.trim()
+
+    if movie_name == "" do
+      send_error_message(channel_id, "Uso: `!plot `")
+    else
+      # 1. Busca os dados (Aqui você chamaria sua função de API ou IA)
+      # Simulando o retorno do JSON da OMDB
+      case fetch_movie_data(movie_name) do
+        {:ok, movie_data} -
+          # 2. IA gera o Storytelling e a Avaliação
+          # (Aqui você integra com sua API de IA preferida)
+          {story, evaluation} = generate_ai_content(movie_data)
+
+          # 3. Envia o Embed final
+          send_plot_embed(channel_id, movie_data, story, evaluation)
+
+        {:error, _reason} -
+          send_error_message(channel_id, "Filme não encontrado ou erro na busca.")
+      end
+    end
+  end
+
+  # --- Funções Auxiliares ---
+
+  def fetch_movie_data(movie_title) do
+    encoded_title = URI.encode(movie_title)
+    url = "http://www.omdbapi.com/?apikey=#{@omdb_api_key}&t=#{encoded_title}"
+
+    case HTTPoison.get(url) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -
+        case Jason.decode(body) do
+          {:ok, movie_data} -
+            if movie_data["Response"] == "True" do
+              {:ok, movie_data}
+            else
+              {:error, movie_data["Error"] || "Movie not found"}
+            end
+          {:error, reason} -
+            {:error, "Failed to decode JSON: #{inspect(reason)}"}
+        end
+
+      {:ok, %HTTPoison.Response{status_code: status, body: body}} -
+        {:error, "HTTP #{status}: #{body}"}
+
+      {:error, %HTTPoison.Error{reason: reason}} -
+        {:error, "Request failed: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Recebe os dados do OMDB e usa o Gemini para gerar storytelling e avaliação.
+  """
+  def generate_ai_content(movie_data) do
+    # Preparamos os dados para o prompt
+    movie_info = Jason.encode!(movie_data)
+
+    prompt = """
+    Você é um contador de histórias e crítico de cinema.
+    Com base nos seguintes dados do filme vindos da API OMDB:
+    #{movie_info}
+
+    Sua tarefa:
+    1. Crie um storytelling curto e envolvente (máximo 500 caracteres) sobre o enredo.
+    2. Faça uma avaliação dizendo se o filme é bom ou não, baseando-se estritamente nas notas do Rotten Tomatoes, IMDb e Metacritic presentes nos dados.
+
+    """
+
+    # Chamada ao Gemini (ajuste o modelo conforme sua preferência)
+    case Gemini.generate(prompt) do
+      {:ok, response} -
+        {:ok,text}= Gemini.extract_text(response)|
+        text
+
+      {:error, reason} -
+        IO.inspect(reason, label: "ERRO GEMINI")
+        {"Não foi possível gerar a história agora.", "Confira as notas abaixo."}
+    end
+  end
+
+Agora, gostaria que você adapte a função plot usando as funções auxiliares dela. Primeiro faz a função do request no omdb e em seguida chama a função do gemini mas não quero que altere as funções auxiliares, somente a principal
+
+
+IA:
+
+Estou trabalhando nisso. A interação entre APIs e a geração de conteúdo dinâmico é um dos pontos fortes desta plataforma.
+
+
+
+Para adaptar a função principal `plot/1` utilizando as funções auxiliares que já construímos, precisamos garantir que o fluxo de dados passe corretamente de uma para outra.
+
+O ponto principal aqui é que a `generate_ai_content/1` retorna o texto processado pela IA, e a `fetch_movie_data/1` retorna o mapa de dados brutos da OMDB.
+
+Aqui está a implementação da função principal adaptada:
+
+```elixir
+  @doc """
+  !plot  - Busca dados no OMDB, gera storytelling e avalia notas.
+  """
+  def plot(%{content: content, channel_id: channel_id}) do
+    # Extrai o nome do filme removendo o prefixo do comando
+    movie_name = content | String.replace_prefix("!plot", "") | String.trim()
+
+    if movie_name == "" do
+      send_error_message(channel_id, "Uso: `!plot `")
+    else
+      # 1. Busca os dados brutos no OMDB usando sua função auxiliar
+      case fetch_movie_data(movie_name) do
+        {:ok, movie_data} -
+          # 2. Passa o mapa de dados para a função do Gemini gerar o conteúdo
+          # Note: Como sua função auxiliar retorna o texto, vamos usá-lo no Embed
+          ai_response = generate_ai_content(movie_data)
+
+          # 3. Envia o Embed final
+          # Aqui usamos os dados do OMDB (para poster/título) e o texto da IA
+          send_plot_embed(channel_id, movie_data, ai_response)
+
+        {:error, reason} -
+          send_error_message(channel_id, "Erro ao buscar filme: #{reason}")
+      end
+    end
+  end
+
+  # Ajuste na função de envio para aceitar o texto consolidado da IA
+  defp send_plot_embed(channel_id, movie, ai_text) do
+    embed = %Nostrum.Struct.Embed{
+      title: "🎬 #{movie["Title"]} (#{movie["Year"]})",
+      description: ai_text,
+      thumbnail: %Nostrum.Struct.Embed.Thumbnail{url: movie["Poster"]},
+      color: 0x1ABC9C,
+      fields: [
+        %{
+          name: "📊 Notas Oficiais", 
+          value: format_ratings(movie["Ratings"]), 
+          inline: false
+        }
+      ],
+      footer: %Nostrum.Struct.Embed.Footer{text: "Davibot Movie Storyteller"}
+    }
+
+    Nostrum.Api.create_message(channel_id, embeds: [embed])
+  end
+
+  defp format_ratings(ratings) when is_list(ratings) do
+    ratings
+    | Enum.map(fn %{"Source" = s, "Value" = v} - "• **#{s}:** #{v}" end)
+    | Enum.join("\n")
+  end
+  defp format_ratings(_), do: "Notas não disponíveis."
+```
+
+### O que foi feito:
+1.  **Fluxo Sequencial:** A função agora segue rigorosamente a ordem: Extração - `fetch_movie_data` - `generate_ai_content` - `send_plot_embed`.
+2.  **Tratamento de Dados:** Como a OMDB retorna chaves em String e com iniciais maiúsculas (ex: `movie["Title"]`), ajustei o acesso aos campos dentro da função de Embed para evitar erros de `KeyError`.
+3.  **Integração com Gemini:** A variável `ai_response` recebe o retorno da sua função auxiliar (que você definiu como o texto extraído da resposta da IA) e o coloca diretamente na descrição do Embed.
+4.  **Formatação de Notas:** Adicionei uma pequena função `format_ratings` para transformar a lista de notas da OMDB em um formato legível para o Discord.
+
+Dessa forma, você mantém a lógica de IA e de API isoladas em suas funções auxiliares e a `plot/1` atua apenas como a maestrina do processo!
+
+
+Usuário:
+
+@doc """
+  Recebe os dados do OMDB e usa o Gemini para gerar storytelling e avaliação.
+  """
+  def generate_ai_content(movie_data) do
+    # Preparamos os dados para o prompt
+    movie_info = Jason.encode!(movie_data)
+
+    prompt = """
+    Você é um contador de histórias e crítico de cinema.
+    Com base nos seguintes dados do filme vindos da API OMDB:
+    #{movie_info}
+
+    Sua tarefa:
+    1. Crie um storytelling curto e envolvente (máximo 500 caracteres) sobre o enredo.
+    2. Faça uma avaliação dizendo se o filme é bom ou não, baseando-se estritamente nas notas do Rotten Tomatoes, IMDb e Metacritic presentes nos dados.
+
+    """
+
+    # Chamada ao Gemini (ajuste o modelo conforme sua preferência)
+    case Gemini.generate(prompt) do
+      {:ok, response} -
+        {:ok,text}= Gemini.extract_text(response)|
+        text
+
+      {:error, reason} -
+        IO.inspect(reason, label: "ERRO GEMINI")
+        {"Não foi possível gerar a história agora.", "Confira as notas abaixo."}
+    end
+  end
+
+     error: undefined function text/1 (expected Davibot.Commands to define such a function or for it to be imported, but none are available)
+     │
+ 456 │         text
+     │         ^^^^
+     │
+     └─ lib/davibot/commands.ex:456:9: Davibot.Commands.generate_ai_content/1
+
+o meu intuito é retornar o text
+
+
+IA:
+
+Estou analisando o erro de função indefinida.
+
+
+
+O erro `undefined function text/1` acontece porque o Elixir está tentando interpretar a palavra `text` na última linha do seu bloco `case` como uma chamada de função, mas ela não existe. Além disso, a sintaxe do seu *pipeline* (`|`) ficou incompleta.
+
+No Elixir, o resultado da última expressão de um bloco é o que a função retorna automaticamente.
+
+Aqui está a correção da sua função `generate_ai_content/1` para retornar apenas a string do texto extraído:
+
+```elixir
+  @doc """
+  Recebe os dados do OMDB e usa o Gemini para gerar storytelling e avaliação.
+  """
+  def generate_ai_content(movie_data) do
+    movie_info = Jason.encode!(movie_data)
+
+    prompt = """
+    Você é um contador de histórias e crítico de cinema.
+    Com base nos seguintes dados do filme vindos da API OMDB:
+    #{movie_info}
+
+    Sua tarefa:
+    1. Crie um storytelling curto e envolvente (máximo 500 caracteres) sobre o enredo.
+    2. Faça uma avaliação dizendo se o filme é bom ou não, baseando-se estritamente nas notas do Rotten Tomatoes, IMDb e Metacritic presentes nos dados.
+    """
+
+    case Gemini.generate(prompt) do
+      {:ok, response} -
+        # Extraímos o texto e ele será o retorno automático do case
+        Gemini.extract_text(response)
+
+      {:error, reason} -
+        IO.inspect(reason, label: "ERRO GEMINI")
+        "Não foi possível gerar a história agora, mas o filme é #{movie_data["Title"]}."
+    end
+  end
+```
+
+### O que foi corrigido:
+
+1.  **Sintaxe do Retorno:** Removi o `{:ok, text} = ...` e a palavra `text` solta no final. Agora, `Gemini.extract_text(response)` é a última expressão do caminho de sucesso, então seu valor é retornado diretamente.
+2.  **Remoção do Pipe Incompleto:** O símbolo `|` no final da linha anterior estava esperando uma função para receber o dado, o que causava erro de compilação.
+3.  **Consistência de Retorno:** No `{:error}`, alterei para retornar uma String simples em vez de uma tupla `{"historia", "avaliacao"}`, para que a sua função principal `plot/1` receba sempre o mesmo tipo de dado (String) e consiga colocar na `description` do Embed sem dar erro de tipo.
+
+### Como isso se encaixa no seu `plot/1`:
+
+Como agora a `generate_ai_content/1` retorna uma **String**, sua função principal vai funcionar perfeitamente assim:
+
+```elixir
+# Dentro do plot/1
+ai_response = generate_ai_content(movie_data) # ai_response será a String do texto
+send_plot_embed(channel_id, movie_data, ai_response)
+```
+
+Dessa forma, o texto gerado pela IA (storytelling + avaliação) aparecerá todo dentro do corpo principal do Embed no Discord.
+
+
+Usuário:
+
+entenda:
+
+case Gemini.generate(prompt) do
+      {:ok, response} -
+        {:ok,text}= Gemini.extract_text(response)
+esse trecho está certo, o problema é após que é o pipe, eu vi no readme do pacote e é assim, veja:
+
+https://github.com/nshkrdotcom/gemini_ex
+
+
+IA:
+
+Estou analisando o trecho de código e o link que você enviou.
+
+
+
+O erro `undefined function text/1` aconteceu porque o Elixir tentou interpretar a palavra `text` sozinha como uma função. De acordo com o README oficial do `gemini_ex`, a forma correta de extrair o texto é usando `Gemini.extract_text(response)`, que retorna uma tupla `{:ok, text}`.
+
+Para retornar apenas a string (o conteúdo do texto) e evitar o erro, você deve fazer o *pattern matching* e deixar o Elixir retornar o valor da variável.
+
+Aqui está a sua função `generate_ai_content/1` corrigida seguindo exatamente o padrão do pacote:
+
+```elixir
+  @doc """
+  Recebe os dados do OMDB e usa o Gemini para gerar storytelling e avaliação.
+  """
+  def generate_ai_content(movie_data) do
+    # Preparamos os dados para o prompt
+    movie_info = Jason.encode!(movie_data)
+
+    prompt = """
+    Você é um contador de histórias e crítico de cinema.
+    Com base nos seguintes dados do filme vindos da API OMDB:
+    #{movie_info}
+
+    Sua tarefa:
+    1. Crie um storytelling curto e envolvente (máximo 500 caracteres) sobre o enredo.
+    2. Faça uma avaliação dizendo se o filme é bom ou não, baseando-se estritamente nas notas do Rotten Tomatoes, IMDb e Metacritic presentes nos dados.
+    """
+
+    # Chamada ao Gemini conforme o README do pacote
+    case Gemini.generate(prompt) do
+      {:ok, response} -
+        # O README diz que extract_text retorna {:ok, text}
+        case Gemini.extract_text(response) do
+          {:ok, text} - text
+          _ - "Erro ao extrair o texto da resposta da IA."
+        end
+
+      {:error, reason} -
+        IO.inspect(reason, label: "ERRO GEMINI")
+        "Não foi possível gerar a história agora. Título: #{movie_data["Title"]}"
+    end
+  end
+```
+
+### O que mudou:
+1.  **Pattern Matching Correto:** Agora usamos `case Gemini.extract_text(response) do {:ok, text} - text end`. Isso garante que o valor extraído (a String) seja o retorno da função.
+2.  **Remoção do Pipe Errado:** O símbolo `|` foi removido, pois ele estava tentando passar o resultado para uma função chamada `text`, que não existe.
+3.  **Fluxo Limpo:** Se o Gemini responder com sucesso, a função retorna a String do texto. Se houver erro na API ou na extração, ela retorna uma String de erro amigável para o Discord.
+
+Agora sua função principal `plot/1` receberá a String corretamente e poderá montá-la no Embed!
+
+
+Usuário:
+
+como seria a função para o consumer.ex
+
+
+IA:
+
+Estou preparando a resposta. O código pode variar dependendo de outros módulos que interagem com o consumer.
+
+
+
+Para o seu módulo `Davibot.Consumer`, a implementação segue o padrão de *pattern matching* que já estamos utilizando para os outros comandos.
+
+Como o comando `!plot` pode receber nomes de filmes com espaços (ex: `!plot Interstellar` ou `!plot O Auto da Compadecida`), usamos a sintaxe de binário para capturar tudo o que começa com o prefixo do comando.
+
+Aqui está a cláusula para adicionar ao seu `Consumer`:
+
+```elixir
+# lib/davibot/consumer.ex
+
+defp handle_message(%{content: &lt;&lt;"!plot", _::binary} = msg) do
+  IO.inspect("PLOT ACIONADO")
+  Commands.plot(msg)
+end
+```
+
+### Por que essa implementação é a correta?
+
+1.  **`&lt;&lt;"!plot", _::binary`**: Este *match* garante que qualquer mensagem que **comece** com `!plot` caia nesta função, independentemente do que venha depois (o nome do filme).
+2.  **Encaminhamento Simples**: Seguindo a **Responsabilidade Única**, o `Consumer` não tenta entender o nome do filme; ele apenas identifica o comando e passa a "bola" (o mapa `msg`) para o módulo `Commands.plot/1`, que já isolamos para tratar a lógica de API e IA.
+3.  **IO.inspect**: Mantive o log no console para que você possa acompanhar em tempo real se o bot está identificando o gatilho corretamente durante os testes.
+
+### Ordem das cláusulas
+Lembre-se de colocar essa função junto com as outras cláusulas `defp handle_message`. O Elixir testará cada uma de cima para baixo até encontrar a primeira que combine com o conteúdo da mensagem.
+
+Se o seu `Consumer` estiver estruturado com um `case` ou múltiplos `defp`, basta inserir essa nova linha e o comando `!plot` já estará ativo!
+
+
+Usuário:
+
+def fetch_movie_data(movie_title) do
+    encoded_title = URI.encode(movie_title)
+    url = "http://www.omdbapi.com/?apikey=#{@omdb_api_key}&t=#{encoded_title}"
+
+    case HTTPoison.get(url) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -
+        case Jason.decode(body) do
+          {:ok, movie_data} -
+            if movie_data["Response"] == "True" do
+              {:ok, movie_data}
+            else
+              {:error, movie_data["Error"] || "Movie not found"}
+            end
+          {:error, reason} -
+            {:error, "Failed to decode JSON: #{inspect(reason)}"}
+        end
+
+      {:ok, %HTTPoison.Response{status_code: status, body: body}} -
+        {:error, "HTTP #{status}: #{body}"}
+
+      {:error, %HTTPoison.Error{reason: reason}} -
+        {:error, "Request failed: #{inspect(reason)}"}
+    end
+  end
+vamos adicionar um IO.inspect para verificar se foi feito o request e a resposta
+
+
+IA:
+
+Estou adicionando o IO.inspect.
+
+
+
+Para adicionar o `IO.inspect` e monitorar tanto a requisição quanto a resposta da API, vamos inserir os logs logo após a montagem da URL e assim que recebermos o corpo da resposta.
+
+Aqui está a sua função `fetch_movie_data/1` atualizada com os logs de depuração:
+
+```elixir
+  def fetch_movie_data(movie_title) do
+    encoded_title = URI.encode(movie_title)
+    url = "http://www.omdbapi.com/?apikey=#{@omdb_api_key}&t=#{encoded_title}"
+
+    # Log da URL que será chamada
+    IO.inspect(url, label: "OMDB REQUEST URL")
+
+    case HTTPoison.get(url) do
+      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -
+        # Log do corpo bruto recebido da API
+        IO.inspect(body, label: "OMDB RESPONSE BODY")
+
+        case Jason.decode(body) do
+          {:ok, movie_data} -
+            if movie_data["Response"] == "True" do
+              {:ok, movie_data}
+            else
+              {:error, movie_data["Error"] || "Movie not found"}
+            end
+          {:error, reason} -
+            {:error, "Failed to decode JSON: #{inspect(reason)}"}
+        end
+
+      {:ok, %HTTPoison.Response{status_code: status, body: body}} -
+        IO.inspect(status, label: "OMDB HTTP ERROR STATUS")
+        {:error, "HTTP #{status}: #{body}"}
+
+      {:error, %HTTPoison.Error{reason: reason}} -
+        IO.inspect(reason, label: "OMDB CONNECTION ERROR")
+        {:error, "Request failed: #{inspect(reason)}"}
+    end
+  end
+```
+
+### O que foi adicionado:
+1.  **`IO.inspect(url, label: "OMDB REQUEST URL")`**: Mostra exatamente qual endereço o bot está tentando acessar. Útil para verificar se a `apikey` e o nome do filme foram inseridos corretamente.
+2.  **`IO.inspect(body, label: "OMDB RESPONSE BODY")`**: Mostra o JSON bruto que o servidor da OMDB devolveu. Isso ajuda a identificar se a API retornou um erro inesperado ou se a estrutura do JSON mudou.
+3.  **Labels**: Usei o parâmetro `label` para que, no seu terminal, os logs fiquem identificados (ex: `OMDB REQUEST URL: "http://..."`), facilitando a leitura entre outras mensagens do bot.
+
+Agora, ao rodar o comando `!plot`, você verá todo o rastro da comunicação no console do seu servidor Elixir!
+
+
+Usuário:
+
+a api key não está sendo resgatada:
+"PLOT ACIONADO"
+OMDB REQUEST URL: "http://www.omdbapi.com/?apikey=&t=cyberpunk"
+OMDB HTTP ERROR STATUS: 401
+
+
+# lib/davibot/commands.exs
+defmodule Davibot.Commands do
+  @moduledoc """
+  Aqui é implementado os comando do davibot
+  """
+  #alias Nostrum.Api.Message
+  alias Nostrum.Api
+
+  alias Davibot.Store
+
+  @omdb_api_key Application.compile_env(:davibot, :omdb_api_key)
+# config/runtime.exs
+import Config
+import Dotenvy
+
+source!([".env", System.get_env()])
+
+config :nostrum,
+  token: env!("DISCORD_TOKEN", :string!)
+
+config :davibot,
+  omdb_api_key: env!("OMDB_TOKEN", :string!)
+
+config :gemini_ex,
+  api_key: env!("GEMINI_API_KEY", :string!)
+
+
+IA:
+
+Estou analisando o problema com a API key. A configuração parece indicar um token que precisa ser carregado.
+
+
+
+O erro `401 Unauthorized` e a URL exibindo `apikey=` vazia indicam que o valor da configuração não está chegando à variável de módulo `@omdb_api_key`. No Elixir, variáveis de módulo definidas com `Application.compile_env/2` são fixadas durante a **compilação**. Se você alterou o `runtime.exs` ou o `.env` após ter compilado o módulo `Davibot.Commands`, o valor antigo (ou nulo) continuará lá até que o código seja recompilado.
+
+Para resolver isso e tornar o bot mais resiliente a mudanças em tempo de execução, a melhor prática é buscar o valor dentro da função ou garantir a recompilação.
+
+### 1. Solução Recomendada: Busca em Tempo de Execução
+Em vez de usar uma variável de módulo (que é estática), busque o valor diretamente dentro da função `fetch_movie_data/1`. Isso garante que o bot sempre use o valor mais atual carregado pelo `runtime.exs`.
+
+```elixir
+def fetch_movie_data(movie_title) do
+  # Busca o valor em tempo de execução, não na compilação
+  api_key = Application.get_env(:davibot, :omdb_api_key)
+  
+  encoded_title = URI.encode(movie_title)
+  url = "http://www.omdbapi.com/?apikey=#{api_key}&t=#{encoded_title}"
+
+  IO.inspect(url, label: "OMDB REQUEST URL")
+  # ... restante da função
+end
+```
+
+### 2. Por que o seu `@omdb_api_key` falhou?
+Existem três motivos comuns para isso acontecer:
+
+1.  **Ordem de Compilação:** O atributo `@omdb_api_key` é avaliado quando o arquivo é compilado. Se o `runtime.exs` ainda não foi processado pelo Mix durante a fase de compilação (o que é comum, já que ele é feito para o *runtime*), o valor será `nil`.
+2.  **Cache de Compilação:** Se você adicionou a configuração mas não rodou um `mix clean` ou não alterou o arquivo `commands.exs`, o Elixir não recompila o módulo e mantém o valor anterior.
+3.  **Nome do App:** Verifique no seu arquivo `mix.exs` se o nome da aplicação é exatamente `:davibot`. Se for `:davi_bot` ou outro nome, o `Application.get_env` retornará vazio.
+
+### 3. Como testar agora
+Para forçar o Elixir a reconhecer a nova configuração sem mudar o código para `Application.get_env`, você pode tentar:
+
+```bash
+mix clean
+mix compile
+```
+
+No entanto, mudar para `Application.get_env(:davibot, :omdb_api_key)` dentro da função é a solução definitiva para evitar que esse problema ocorra novamente sempre que você trocar uma chave no `.env`.
+
+**Dica adicional:** Verifique se no seu `.env` a chave está como `OMDB_TOKEN` (como no seu `runtime.exs`) e se não há aspas sobrando ou espaços, pois isso também pode invalidar a string da API.
