@@ -1,86 +1,59 @@
-# lib/davibot/consumer.exs
+# lib/davibot/consumer.ex
 defmodule Davibot.Consumer do
   @moduledoc """
-  handler de eventos - despacha os comandos
-  Na minha visão: Controller para os comandos - recebe as entradas e direciona para as funções commands
+  Handler de eventos - Despacha os comandos centralizadamente.
   """
 
   use Nostrum.Consumer
-  # alias Nostrum.Api
+  alias Davibot.Commands
+  alias Nostrum.Api.Message
   require Logger
 
-  alias Davibot.Commands
+  def handle_event({:MESSAGE_CREATE, msg, _ws}) do
+    # 1. Normalização: Coloca tudo em minúsculo e remove espaços extras nas pontas
+    # Isso resolve o problema de "!PLOT" ou "!xp  "
+    content_lower = msg.content |> String.downcase() |> String.trim()
 
-  alias Nostrum.Api.Message
+    # 2. Direcionamento via cond (Roteador)
+    cond do
+      # Comandos exatos
+      content_lower == "!calabreso" ->
+        Commands.calabreso(msg)
 
+      # Comandos que aceitam variações (Roleta)
+      # O String.starts_with? aceita uma LISTA de strings
+      String.starts_with?(content_lower, ["!roleta-russa", "!roleta_russa", "!roleta russa"]) ->
+        IO.inspect("ROLETA RUSSA ACIONADA")
+        Commands.roleta_russa(msg)
+        |> send_embed(msg.channel_id)
 
-  def handle_event({:MESSAGE_CREATE, msg, _ws}) do # TODO: adaptar para que aceite com espaço, e com caixa alta. usar pipe
-    # IO.inspect(msg) printa a mensagem no terminal
-    handle_message(msg)
+      # Comandos com argumentos (Prefixos)
+      String.starts_with?(content_lower, "!sair") ->
+        Commands.sair(msg)
+
+      String.starts_with?(content_lower, "!avatar") ->
+        Commands.avatar(msg)
+
+      String.starts_with?(content_lower, "!kick") ->
+        Commands.kick(msg)
+
+      String.starts_with?(content_lower, "!xp") ->
+        Commands.xp(msg)
+
+      String.starts_with?(content_lower, "!plot") ->
+        Commands.plot(msg)
+
+      # Caso não seja nenhum comando
+      true ->
+        :ignore
+    end
   end
-
-  #def handle_event({:MESSAGE_CREATE, msg = %Message{}, _}) do
-  #  handle_command(msg)
-  #end
 
   # Ignora outros eventos (READY, etc.)
-  def handle_event(_event, state), do: {:noreply, state}
+  def handle_event(_event, _state), do: :ok
 
-  # manda o calabreso
-  defp handle_message(%{content: "!calabreso"} = msg) do
-    IO.inspect("CALABRESO MESSAGE ACIONADO")
-    Commands.calabreso(msg)
-  end
-
-   defp handle_message(%{channel_id: channel_id, content: <<"!roleta-russa", _::binary>>} = msg) do
-    IO.inspect("ROLETA RUSSA ACIONADA")
-    Commands.roleta_russa(msg)
-    |> send_embed(channel_id)
-  end
-
-  defp handle_message(%{channel_id: channel_id, content: <<"!roleta_russa", _::binary>>} = msg) do
-    IO.inspect("ROLETA RUSSA ACIONADA")
-    Commands.roleta_russa(msg)
-    |> send_embed(channel_id)
-  end
-
-  defp handle_message(%{channel_id: channel_id, content: <<"!roleta russa", _::binary>>} = msg) do
-    IO.inspect("ROLETA RUSSA ACIONADA")
-    Commands.roleta_russa(msg)
-    |> send_embed(channel_id)
-  end
-
-  defp handle_message(%{channel_id: channel_id, content: <<"!sair ", _::binary>>} = msg) do
-    IO.inspect("SAIDA DO SERVIDOR ACIONADA")
-    Commands.sair(msg)
-    #{:noreply, state}
-  end
-
-  defp handle_message(%{content: <<"!avatar", _::binary>>} = msg) do
-    IO.inspect("COMANDO AVATAR ACIONADO")
-    Commands.avatar(msg)
-  end
-
-  defp handle_message(%{content: <<"!kick", _::binary>>} = msg) do
-    IO.inspect("KICK ACIONADO")
-    Commands.kick(msg)
-  end
-
-  defp handle_message(%{content: <<"!xp", _::binary>>} = msg) do
-    IO.inspect("XP COMANDO ACIONADO")
-    Commands.xp(msg)
-  end
-
-  defp handle_message(%{content: <<"!plot", _::binary>>} = msg) do
-    IO.inspect("PLOT ACIONADO")
-    Commands.plot(msg)
-  end
-
-
-  # Catch-all para mensagens que não são comandos
-  defp handle_message(_msg), do: :ok
-
+  # Função auxiliar para enviar embeds (padronizada para lista)
   defp send_embed(embed, channel_id) do
-    Message.create(channel_id, embed: embed)
+    Message.create(channel_id, embeds: [embed])
   end
 end
