@@ -71,6 +71,11 @@ defmodule Davibot.Consumer do
     Commands.xp(msg)
   end
 
+  defp handle_message(%{content: <<"!plot", _::binary>>} = msg) do
+    IO.inspect("PLOT ACIONADO")
+    Commands.plot(msg)
+  end
+
 
   # Catch-all para mensagens que não são comandos
   defp handle_message(_msg), do: :ok
