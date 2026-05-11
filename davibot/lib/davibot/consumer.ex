@@ -24,24 +24,24 @@ defmodule Davibot.Consumer do
       # O String.starts_with? aceita uma LISTA de strings
       String.starts_with?(content_lower, ["!roleta-russa", "!roleta_russa", "!roleta russa"]) ->
         IO.inspect("ROLETA RUSSA ACIONADA")
-        Commands.roleta_russa(msg)
+        Commands.Moderation.roleta_russa(msg)
         |> send_embed(msg.channel_id)
 
       # Comandos com argumentos (Prefixos)
       String.starts_with?(content_lower, "!sair") ->
-        Commands.sair(msg)
+        Commands.Utility.sair(msg)
 
       String.starts_with?(content_lower, "!avatar") ->
-        Commands.avatar(msg)
+        Commands.Utility.avatar(msg)
 
       String.starts_with?(content_lower, "!kick") ->
-        Commands.kick(msg)
+        Commands.Moderation.kick(msg)
 
       String.starts_with?(content_lower, "!xp") ->
-        Commands.xp(msg)
+        Commands.Social.xp(msg)
 
       String.starts_with?(content_lower, "!plot") ->
-        Commands.plot(msg)
+        Commands.Media.plot(msg)
 
       # Caso não seja nenhum comando
       true ->
