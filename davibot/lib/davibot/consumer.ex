@@ -18,7 +18,7 @@ defmodule Davibot.Consumer do
     cond do
       # Comandos exatos
       content_lower == "!calabreso" ->
-        Commands.calabreso(msg)
+        Commands.Social.calabreso(msg)
 
       # Comandos que aceitam variações (Roleta)
       # O String.starts_with? aceita uma LISTA de strings
